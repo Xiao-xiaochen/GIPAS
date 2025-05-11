@@ -5,8 +5,7 @@
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
-    "lib",
-    "dist"
+    "lib"
   ],
   "license": "MIT",
   "keywords": [
@@ -18,6 +17,6 @@
     "koishi": "^4.18.7"
   },
   "dependencies": {
-    "@google-cloud/aiplatform": "^4.1.0"
+    "@google/genai": "^0.13.0"
   }
 }
