@@ -1,9 +1,20 @@
 {
   "name": "koishi-plugin-gipas",
-  "description": "全群信息处理自动化系统",
-  "version": "0.0.1",
+  "version": "1.0.3",
+  "koishi": {
+    "description": {
+      "en": "Group information processing automation system",
+      "zh": "全群信息处理自动化系统"
+    },
+    "service": {
+      "required": [
+        "database",
+        "cron"
+      ]
+    }
+  },
   "contributors": [
-    "Xiao-xiaochen <xiaochen18217@gmail.com>",
+    "Xiao-xiaochen <xiaochen18217@gmail.com>"
   ],
   "license": "MIT",
   "homepage": "https://github.com/Xiao-xiaochen/gipas",

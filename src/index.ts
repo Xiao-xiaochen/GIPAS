@@ -173,7 +173,67 @@ export function apply(ctx: Context, config: Config) {
   ctx.model.extend('gipas_violations', { /* ... */ }, { autoInc: true });
 
   let gipasChat: any = null; 
-  
+  let activeGuildId: string | null = null; // Variable to store the active guild ID
+
+  async function setGuildMute(guildId: string, mute: boolean, ctx: Context, config: Config) {
+    if (!guildId) {
+      ctx.logger('gipas').warn('无法执行全体禁言/解禁：未设置激活的服务器ID。');
+      return;
+    }
+    // Define actionText before try block
+    const actionText = mute ? '禁言' : '解除禁言'; 
+    try {
+      // Attempt to get bot ID using ctx.self
+      const botId = ctx.self; 
+      if (!botId) {
+         ctx.logger('gipas').error('无法获取机器人自身ID (ctx.self)');
+         return;
+      }
+      const bot = ctx.bots[`${ctx.platform}:${botId}`]; // Get the bot instance using ctx.self
+      if (!bot) {
+        ctx.logger('gipas').error(`无法获取机器人实例 (Platform: ${ctx.platform}, ID: ${botId})。`);
+        return;
+      }
+
+      const members = await bot.getGuildMemberMap(guildId);
+      const duration = mute ? 2147483647 : 0; // Max 32-bit signed integer for "permanent" mute, 0 for unmute
+      let successCount = 0;
+      let failCount = 0;
+
+      ctx.logger('gipas').info(`开始为服务器 ${guildId} 执行全体${actionText}操作...`);
+
+      for (const userId in members) {
+        if (userId === bot.userId) continue; // Skip the bot itself
+
+        // Optional: Add logic here to skip admins/owner if needed
+        // const member = members[userId];
+        // if (member.roles.includes('admin_role_id') || userId === guildOwnerId) continue;
+
+        try {
+          await bot.muteGuildMember(guildId, userId, duration);
+          successCount++;
+          // Avoid spamming logs for each user
+          // ctx.logger('gipas').debug(`用户 ${userId} ${actionText}成功。`);
+          // Add a small delay to avoid rate limits, if necessary
+          // await new Promise(resolve => setTimeout(resolve, 100)); 
+        } catch (e) {
+          failCount++;
+          ctx.logger('gipas').warn(`用户 ${userId} ${actionText}失败:`, e.message || e);
+        }
+      }
+      ctx.logger('gipas').info(`服务器 ${guildId} 全体${actionText}操作完成。成功: ${successCount}, 失败: ${failCount}`);
+      // Optionally send a notification to the channel
+      // try {
+      //   await bot.sendMessage(config.activeChannelId, `已执行全体${actionText}操作。`);
+      // } catch (e) {
+      //   ctx.logger('gipas').warn(`发送全体${actionText}通知失败:`, e);
+      // }
+
+    } catch (error) {
+      ctx.logger('gipas').error(`执行全体${actionText}时发生错误:`, error);
+    }
+  }
+
   async function initializeChatSession(channelId: string) {
     if (!config.geminiApiKey) { 
       ctx.logger('gipas').error('无法初始化聊天会话：Gemini API Key 未配置。');
@@ -203,19 +263,33 @@ export function apply(ctx: Context, config: Config) {
   ctx.on('dispose', () => { gipasChat = null; });
 
   ctx.command('gipas.activate').action(async ({ session }) => { 
-    if (session.channelId) {
+    if (session.channelId && session.guildId) { // Ensure guildId is available
       config.activeChannelId = session.channelId; 
+      activeGuildId = session.guildId; // Store the guildId
       await initializeChatSession(session.channelId); 
-      if (gipasChat) { session.send(`GIPAS 已为频道 ${config.activeChannelId} 激活。上下文AI监控已启用。`); }
-      else { session.send(`GIPAS 为频道 ${config.activeChannelId} 激活失败，聊天会话初始化错误。`); }
-      ctx.logger('gipas').info(`GIPAS activated for channel ${config.activeChannelId}.`);
-    } else { session.send('此指令只能在频道内使用。'); }
+      if (gipasChat) { session.send(`GIPAS 已为频道 ${config.activeChannelId} (服务器 ${activeGuildId}) 激活。上下文AI监控和定时禁言已启用。`); }
+      else { session.send(`GIPAS 为频道 ${config.activeChannelId} (服务器 ${activeGuildId}) 激活失败，聊天会话初始化错误。`); }
+      ctx.logger('gipas').info(`GIPAS activated for channel ${config.activeChannelId} in guild ${activeGuildId}.`);
+    } else { session.send('此指令只能在频道内使用，且需要获取服务器ID。'); }
   });
   
-  ctx.cron(config.muteCron, () => { if (config.activeChannelId) { /* ... */ } });
-  ctx.cron(config.unmuteCron, () => { if (config.activeChannelId) { /* ... */ } });
-  ctx.cron(config.weekendMuteCron, () => { if (config.activeChannelId) { /* ... */ } });
-  ctx.cron(config.weekendUnmuteCron, () => { if (config.activeChannelId) { /* ... */ } });
+  // Schedule Mute/Unmute Cron Jobs
+  ctx.cron(config.muteCron, () => { 
+    ctx.logger('gipas').info(`触发工作日禁言任务 (Cron: ${config.muteCron})`);
+    setGuildMute(activeGuildId, true, ctx, config); 
+  });
+  ctx.cron(config.unmuteCron, () => { 
+    ctx.logger('gipas').info(`触发工作日解禁任务 (Cron: ${config.unmuteCron})`);
+    setGuildMute(activeGuildId, false, ctx, config); 
+  });
+  ctx.cron(config.weekendMuteCron, () => { 
+    ctx.logger('gipas').info(`触发周末禁言任务 (Cron: ${config.weekendMuteCron})`);
+    setGuildMute(activeGuildId, true, ctx, config); 
+  });
+  ctx.cron(config.weekendUnmuteCron, () => { 
+    ctx.logger('gipas').info(`触发周末解禁任务 (Cron: ${config.weekendUnmuteCron})`);
+    setGuildMute(activeGuildId, false, ctx, config); 
+  });
 
   ctx.on('message', async (session) => {
     ctx.logger('gipas').debug(`[MSG_EVENT] 收到消息. CH: ${session.channelId}, ActiveCH: ${config.activeChannelId}, Content: ${!!session.content}, gipasChat: ${!!gipasChat}`);
@@ -289,13 +363,19 @@ export function apply(ctx: Context, config: Config) {
         case 'warn': 
           session.send(`用户 ${session.userId} 警告：您的消息违反了群规 (等级 ${analysisResult.level})。`); 
           break;
-        case 'mute': 
+        case 'mute':
+          const durationInSeconds = muteMinutesToApply * 60;
+          ctx.logger('gipas').info(`准备禁言用户 ${session.userId} (Guild: ${session.guildId})，时长: ${muteMinutesToApply} 分钟 (${durationInSeconds} 秒)。`);
           try {
-            await session.bot.muteGuildMember(session.guildId, session.userId, muteMinutesToApply * 60);
+            await session.bot.muteGuildMember(session.guildId, session.userId, durationInSeconds);
+            ctx.logger('gipas').info(`用户 ${session.userId} 禁言API调用成功。`);
             session.send(`用户 ${session.userId} 因违反群规 (等级 ${analysisResult.level}) 已被禁言 ${muteMinutesToApply} 分钟。`);
-          } catch (e) { ctx.logger('gipas').error(`禁言用户 ${session.userId} 失败:`, e); session.send(`尝试禁言用户 ${session.userId} 失败。`); }
+          } catch (e) { 
+            ctx.logger('gipas').error(`禁言用户 ${session.userId} (时长 ${durationInSeconds} 秒) 失败:`, e); 
+            session.send(`尝试禁言用户 ${session.userId} 失败。`); 
+          }
           break;
-        case 'kick': 
+        case 'kick':
           try {
             await session.bot.kickGuildMember(session.guildId, session.userId);
             session.send(`用户 ${session.userId} 因严重违反群规 (等级 ${analysisResult.level}) 已被移出本群。`);
