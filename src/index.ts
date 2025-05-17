@@ -171,7 +171,18 @@ async function analyzeJoinRequest(joinMessage: string, config: Config, ctx: Cont
 
 export function apply(ctx: Context, config: Config) {
   ctx.logger('gipas').info('插件已加载');
-  ctx.model.extend('gipas_violations', { /* ... */ }, { autoInc: true });
+  ctx.model.extend('gipas_violations', {
+    id: 'unsigned',
+    userId: 'string',
+    guildId: 'string',
+    channelId: 'string',
+    messageId: 'string',
+    messageContent: 'text',
+    timestamp: 'timestamp',
+    violationLevel: 'integer',
+    actionTaken: 'string',
+    muteDurationMinutes: 'integer',
+  }, { autoInc: true, primary: 'id' });
 
   let gipasChat: any = null; 
   let activeGuildId: string | null = null; // Variable to store the active guild ID
