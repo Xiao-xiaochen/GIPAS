@@ -21,6 +21,7 @@ export interface Config {
   muteCron: string;
   unmuteCron: string;
   weekendMuteCron: string;
+  
   weekendUnmuteCron: string;
   level1Action: 'none' | 'warn' | 'mute';
   level1MuteMinutes: number;
@@ -195,40 +196,27 @@ export function apply(ctx: Context, config: Config) {
         return;
       }
 
-      const members = await bot.getGuildMemberMap(guildId);
-      const duration = mute ? 2147483647 : 0; // Max 32-bit signed integer for "permanent" mute, 0 for unmute
-      let successCount = 0;
-      let failCount = 0;
+      ctx.logger('gipas').info(`开始为服务器 ${guildId} 执行全体${actionText}操作 (API: set_group_whole_ban)...`);
 
-      ctx.logger('gipas').info(`开始为服务器 ${guildId} 执行全体${actionText}操作...`);
-
-      for (const userId in members) {
-        if (userId === bot.userId) continue; // Skip the bot itself
-
-        // Optional: Add logic here to skip admins/owner if needed
-        // const member = members[userId];
-        // if (member.roles.includes('admin_role_id') || userId === guildOwnerId) continue;
-
-        try {
-          await bot.muteGuildMember(guildId, userId, duration);
-          successCount++;
-          // Avoid spamming logs for each user
-          // ctx.logger('gipas').debug(`用户 ${userId} ${actionText}成功。`);
-          // Add a small delay to avoid rate limits, if necessary
-          // await new Promise(resolve => setTimeout(resolve, 100)); 
-        } catch (e) {
-          failCount++;
-          ctx.logger('gipas').warn(`用户 ${userId} ${actionText}失败:`, e.message || e);
-        }
+      try {
+        // Call the platform-specific API for whole group mute using type assertion
+        await (bot as any).invoke('set_group_whole_ban', { group_id: parseInt(guildId), enable: mute });
+        ctx.logger('gipas').info(`服务器 ${guildId} 全体${actionText}API调用成功。`);
+        // Optionally send a notification to the channel
+        // try {
+        //   await bot.sendMessage(config.activeChannelId, `已执行全体${actionText}操作。`);
+        // } catch (e) {
+        //   ctx.logger('gipas').warn(`发送全体${actionText}通知失败:`, e);
+        // }
+      } catch (e) {
+        ctx.logger('gipas').error(`执行全体${actionText}API调用失败 (服务器 ${guildId}):`, e.message || e);
+        // Optionally send a failure notification
+        // try {
+        //   await bot.sendMessage(config.activeChannelId, `执行全体${actionText}操作失败。`);
+        // } catch (e) {
+        //   ctx.logger('gipas').warn(`发送全体${actionText}失败通知失败:`, e);
+        // }
       }
-      ctx.logger('gipas').info(`服务器 ${guildId} 全体${actionText}操作完成。成功: ${successCount}, 失败: ${failCount}`);
-      // Optionally send a notification to the channel
-      // try {
-      //   await bot.sendMessage(config.activeChannelId, `已执行全体${actionText}操作。`);
-      // } catch (e) {
-      //   ctx.logger('gipas').warn(`发送全体${actionText}通知失败:`, e);
-      // }
-
     } catch (error) {
       ctx.logger('gipas').error(`执行全体${actionText}时发生错误:`, error);
     }
@@ -367,8 +355,8 @@ export function apply(ctx: Context, config: Config) {
           const durationInSeconds = muteMinutesToApply * 60;
           ctx.logger('gipas').info(`准备禁言用户 ${session.userId} (Guild: ${session.guildId})，时长: ${muteMinutesToApply} 分钟 (${durationInSeconds} 秒)。`);
           try {
-            await session.bot.muteGuildMember(session.guildId, session.userId, durationInSeconds);
-            ctx.logger('gipas').info(`用户 ${session.userId} 禁言API调用成功。`);
+            await (session.bot as any).invoke('set_group_ban', { group_id: parseInt(session.guildId), user_id: parseInt(session.userId), duration: durationInSeconds });
+            ctx.logger('gipas').info(`用户 ${session.userId} 禁言API调用 (set_group_ban) 成功。`);
             session.send(`用户 ${session.userId} 因违反群规 (等级 ${analysisResult.level}) 已被禁言 ${muteMinutesToApply} 分钟。`);
           } catch (e) { 
             ctx.logger('gipas').error(`禁言用户 ${session.userId} (时长 ${durationInSeconds} 秒) 失败:`, e); 
