@@ -7,13 +7,31 @@ import * as https from 'node:https';
 
 export interface UserData { /* ... */ id: number; userId: string; }
 export interface ViolationRecord { /* ... */ id: number; userId: string; guildId: string; channelId: string; messageId: string; messageContent: string; timestamp: Date; violationLevel: number; actionTaken: string; muteDurationMinutes?: number; }
+export interface UserRecord {
+  id: number;
+  userId: string;
+  guildId: string;
+  level1Violations: number;
+  level2Violations: number;
+  level3Violations: number;
+}
 declare module 'koishi' {
-  interface Tables { userdata: UserData; gipas_violations: ViolationRecord; }
+  interface Tables { userdata: UserData; gipas_violations: ViolationRecord; UserRecord: UserRecord; }
 }
 
 export const name = 'gipas'
 export const inject = { required: [ 'cron', 'database' ] }
-interface ViolationAnalysisResult { violates: boolean; level: 1 | 2 | 3 | null; }
+export interface ViolationAnalysisResult {
+  is_violation: boolean;
+  level?: 1 | 2 | 3;
+  action?: 'warn' | 'mute' | 'kick' | 'none'; // Added 'none' to align with config
+  muteDuration?: number; // in seconds
+  reason?: string;
+}
+let messageHistory: { user: string, content: string, timestamp: Date }[] = [];
+const MAX_HISTORY_MESSAGES = 20; // Define a max number of messages to keep in history
+const MAX_HISTORY_AGE_MS = 5 * 60 * 1000; // 5 minutes in milliseconds
+
 export interface Config {
   activeChannelId: string;
   geminiApiKey: string;
@@ -31,6 +49,7 @@ export interface Config {
   level3MuteMinutes: number; 
   maxViolationHistoryDays: number; 
   kickThreshold: number; 
+  maxChatHistoryLength: number; // New config for chat history length
 }
 
 export const Config: Schema<Config> = Schema.object({
@@ -49,9 +68,10 @@ export const Config: Schema<Config> = Schema.object({
   level3MuteMinutes: Schema.number().description('3级禁言时长(分钟)').default(1440),
   maxViolationHistoryDays: Schema.number().description('历史记录追溯天数(未来功能)').default(30),
   kickThreshold: Schema.number().description('踢出阈值(未来功能)').default(3),
+  maxChatHistoryLength: Schema.number().description('AI聊天上下文历史记录的最大长度').default(10),
 })
 
-const RULES = `
+export const RULES = `
 《小明法》
 本群为征战文游总部，发更新和测试。无关内容少发，稳定为主。
 违规者，直接移出本群。（能否再进管理定）
@@ -75,99 +95,8 @@ const RULES = `
 
 const safetySettingsConfig = [ /* ... */ ];
 
-async function downloadImageAsBase64(url: string, ctx: Context): Promise<{ mimeType: string, data: string } | null> {
-  try {
-    const fetchOptions = { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' } };
-    const response = await fetch(url, fetchOptions);
-    if (!response.ok) { 
-      ctx.logger('gipas').warn(`图片下载失败: ${url}, 状态: ${response.status}`);
-      return null; 
-    }
-    const imageArrayBuffer = await response.arrayBuffer();
-    const base64ImageData = Buffer.from(imageArrayBuffer).toString('base64');
-    const mimeType = response.headers.get('content-type') || 'image/jpeg';
-    return { mimeType, data: base64ImageData };
-  } catch (error) { 
-    ctx.logger('gipas').error(`图片下载异常: ${url}:`, error);
-    return null; 
-  }
-}
-
-async function analyzeChatMessage(
-  chatSession: any, 
-  currentMessage: string, 
-  ctx: Context,
-  config: Config 
-): Promise<ViolationAnalysisResult> {
-  const defaultResult: ViolationAnalysisResult = { violates: false, level: null };
-  const imgTagRegex = /<img.*?src="([^"]+)".*?\/?>/i; 
-  const imgMatch = currentMessage.match(imgTagRegex);
-  const textContent = currentMessage.replace(imgTagRegex, "").trim();
-
-  if (!imgMatch && !textContent) { 
-    ctx.logger('gipas').debug(`消息为空或仅含空白，跳过AI分析: "${currentMessage}"`);
-    return defaultResult; 
-  }
-
-  try {
-    const genAI = new GoogleGenAI({ apiKey: config.geminiApiKey });
-    let predictionText = "false"; 
-
-    if (imgMatch && imgMatch[1]) { 
-      const imageUrl = imgMatch[1];
-      ctx.logger('gipas').debug(`检测到图片。URL: ${imageUrl}, 文本: "${textContent}"`);
-      const imageData = await downloadImageAsBase64(imageUrl, ctx);
-      if (imageData) {
-        const partsForImageAnalysis: Part[] = [ { inlineData: { mimeType: imageData.mimeType, data: imageData.data } } ];
-        let imageAnalysisPrompt = `请根据群规判断此图片内容是否违规。`;
-        if (textContent) imageAnalysisPrompt += `图片附带文本：“${textContent}”。请综合判断图片和文本。`;
-        imageAnalysisPrompt += `\n群规如下：\n${RULES}\n如果违规，请评估严重等级（1-轻微, 2-中等, 3-严重）并以 "true,等级" 格式回应，否则回应 "false"。`;
-        partsForImageAnalysis.push({text: imageAnalysisPrompt});
-        
-        const result = await genAI.models.generateContent({
-            model: config.geminiModel, 
-            contents: [{ role: "user", parts: partsForImageAnalysis }],
-            // safetySettings: safetySettingsConfig, 
-        });
-        predictionText = result.text.toLowerCase().trim();
-        ctx.logger('gipas').info(`图片消息分析: "${currentMessage}", 预测: "${predictionText}"`);
-      } else { 
-        ctx.logger('gipas').warn(`图片处理失败，跳过分析: "${currentMessage}"`);
-        return defaultResult; 
-      }
-    } else if (textContent) { 
-      if (!chatSession) {
-        ctx.logger('gipas').warn('聊天会话未初始化，纯文本消息分析跳过。');
-        return defaultResult;
-      }
-      // Following user's example for chat.sendMessage: { message: "string" }
-      const result = await chatSession.sendMessage({ message: textContent }); 
-      predictionText = result.text.toLowerCase().trim();
-      ctx.logger('gipas').info(`上下文文本分析: "${textContent}", AI原始回复: "${predictionText}"`);
-    } else { return defaultResult; }
-
-    const parts = predictionText.split(',');
-    const violates = parts[0] === 'true';
-    const levelStr = violates && parts.length > 1 ? parts[1].trim() : null;
-    const level = levelStr ? parseInt(levelStr, 10) : null;
-
-    if (violates && level && (level >= 1 && level <= 3)) {
-      return { violates: true, level: level as (1 | 2 | 3) };
-    } else if (violates) { 
-      ctx.logger('gipas').warn(`AI判断违规但未提供有效等级: "${predictionText}". 默认为轻微违规(1)。`);
-      return { violates: true, level: 1 }; 
-    }
-    return { violates: false, level: null };
-  } catch (error) { 
-    ctx.logger('gipas').error('AI消息分析时发生错误:', error);
-    return defaultResult; 
-  }
-}
-
-async function analyzeJoinRequest(joinMessage: string, config: Config, ctx: Context): Promise<ViolationAnalysisResult> {
-  // ... (Implementation as before)
-  return { violates: false, level: null }; // Placeholder
-}
+import { registerMuteCronJobs } from './mute';
+import { handleMessage, analyzeChatMessage, analyzeJoinRequest } from './violation';
 
 export function apply(ctx: Context, config: Config) {
   ctx.logger('gipas').info('插件已加载');
@@ -184,54 +113,18 @@ export function apply(ctx: Context, config: Config) {
     muteDurationMinutes: 'integer',
   }, { autoInc: true, primary: 'id' });
 
+  ctx.model.extend('UserRecord', {
+    id: 'unsigned',
+    userId: 'string',
+    guildId: 'string',
+    level1Violations: 'integer',
+    level2Violations: 'integer',
+    level3Violations: 'integer',
+  }, { autoInc: true, primary: 'id' });
+
   let gipasChat: any = null; 
   let activeGuildId: string | null = null; // Variable to store the active guild ID
-
-  async function setGuildMute(guildId: string, mute: boolean, ctx: Context, config: Config) {
-    if (!guildId) {
-      ctx.logger('gipas').warn('无法执行全体禁言/解禁：未设置激活的服务器ID。');
-      return;
-    }
-    // Define actionText before try block
-    const actionText = mute ? '禁言' : '解除禁言'; 
-    try {
-      // Attempt to get bot ID using ctx.self
-      const botId = ctx.self; 
-      if (!botId) {
-         ctx.logger('gipas').error('无法获取机器人自身ID (ctx.self)');
-         return;
-      }
-      const bot = ctx.bots[`${ctx.platform}:${botId}`]; // Get the bot instance using ctx.self
-      if (!bot) {
-        ctx.logger('gipas').error(`无法获取机器人实例 (Platform: ${ctx.platform}, ID: ${botId})。`);
-        return;
-      }
-
-      ctx.logger('gipas').info(`开始为服务器 ${guildId} 执行全体${actionText}操作 (API: set_group_whole_ban)...`);
-
-      try {
-        // Call the platform-specific API for whole group mute using type assertion
-        await (bot as any).invoke('set_group_whole_ban', { group_id: parseInt(guildId), enable: mute });
-        ctx.logger('gipas').info(`服务器 ${guildId} 全体${actionText}API调用成功。`);
-        // Optionally send a notification to the channel
-        // try {
-        //   await bot.sendMessage(config.activeChannelId, `已执行全体${actionText}操作。`);
-        // } catch (e) {
-        //   ctx.logger('gipas').warn(`发送全体${actionText}通知失败:`, e);
-        // }
-      } catch (e) {
-        ctx.logger('gipas').error(`执行全体${actionText}API调用失败 (服务器 ${guildId}):`, e.message || e);
-        // Optionally send a failure notification
-        // try {
-        //   await bot.sendMessage(config.activeChannelId, `执行全体${actionText}操作失败。`);
-        // } catch (e) {
-        //   ctx.logger('gipas').warn(`发送全体${actionText}失败通知失败:`, e);
-        // }
-      }
-    } catch (error) {
-      ctx.logger('gipas').error(`执行全体${actionText}时发生错误:`, error);
-    }
-  }
+  // messageHistory is now at the top level
 
   async function initializeChatSession(channelId: string) {
     if (!config.geminiApiKey) { 
@@ -246,7 +139,7 @@ export function apply(ctx: Context, config: Config) {
       ];
       gipasChat = genAI.chats.create({ 
         model: config.geminiModel, 
-        history: initialHistory,
+        history: initialHistory, // Restore passing initialHistory here
         // safetySettings: safetySettingsConfig, 
       });
       ctx.logger('gipas').info(`聊天会话已为频道 ${channelId} 初始化。 gipasChat is ${gipasChat ? '有效' : 'null'}`);
@@ -271,121 +164,29 @@ export function apply(ctx: Context, config: Config) {
       ctx.logger('gipas').info(`GIPAS activated for channel ${config.activeChannelId} in guild ${activeGuildId}.`);
     } else { session.send('此指令只能在频道内使用，且需要获取服务器ID。'); }
   });
-  
-  // Schedule Mute/Unmute Cron Jobs
-  ctx.cron(config.muteCron, () => { 
-    ctx.logger('gipas').info(`触发工作日禁言任务 (Cron: ${config.muteCron})`);
-    setGuildMute(activeGuildId, true, ctx, config); 
-  });
-  ctx.cron(config.unmuteCron, () => { 
-    ctx.logger('gipas').info(`触发工作日解禁任务 (Cron: ${config.unmuteCron})`);
-    setGuildMute(activeGuildId, false, ctx, config); 
-  });
-  ctx.cron(config.weekendMuteCron, () => { 
-    ctx.logger('gipas').info(`触发周末禁言任务 (Cron: ${config.weekendMuteCron})`);
-    setGuildMute(activeGuildId, true, ctx, config); 
-  });
-  ctx.cron(config.weekendUnmuteCron, () => { 
-    ctx.logger('gipas').info(`触发周末解禁任务 (Cron: ${config.weekendUnmuteCron})`);
-    setGuildMute(activeGuildId, false, ctx, config); 
-  });
+
+  registerMuteCronJobs(ctx, config, () => activeGuildId);
 
   ctx.on('message', async (session) => {
-    ctx.logger('gipas').debug(`[MSG_EVENT] 收到消息. CH: ${session.channelId}, ActiveCH: ${config.activeChannelId}, Content: ${!!session.content}, gipasChat: ${!!gipasChat}`);
-
-    if (!config.activeChannelId) {
-      ctx.logger('gipas').debug('[MSG_EVENT] 无激活频道，跳过。');
-      return;
-    }
-    if (session.channelId !== config.activeChannelId) {
-      ctx.logger('gipas').debug(`[MSG_EVENT] 消息来自非激活频道 ${session.channelId}，跳过。`);
-      return;
-    }
-     if (!session.content) {
-      ctx.logger('gipas').debug('[MSG_EVENT] 消息无内容，跳过。');
-      return;
-    }
-    if (session.userId === session.bot.userId) {
-      ctx.logger('gipas').debug('[MSG_EVENT] 消息来自机器人自身，跳过。');
-      return;
-    }
-    
-    const imgRegex = /<img.*?src="([^"]+)".*?\/?>/i;
-    const isImageMessage = imgRegex.test(session.content);
-    if (!isImageMessage && !gipasChat) {
-        ctx.logger('gipas').warn('[MSG_EVENT] 收到纯文本消息，但聊天会话 (gipasChat) 未初始化。跳过AI分析。');
-        return;
-    }
-    
-    ctx.logger('gipas').info(`处理来自用户 ${session.userId} 于频道 ${session.channelId} 的消息: "${session.content}"`);
-    const analysisResult = await analyzeChatMessage(gipasChat, session.content, ctx, config); 
-    
-    ctx.logger('gipas').debug(`[MSG_ANALYSIS_RESULT] Violates: ${analysisResult.violates}, Level: ${analysisResult.level}`);
-
-    if (analysisResult.violates) {
-      ctx.logger('gipas').info(`用户 ${session.userId} 违规 (等级 ${analysisResult.level}) 于频道 ${session.channelId}. 消息: "${session.content}"`);
-      
-      try {
-        await ctx.database.create('gipas_violations', {
-          userId: session.userId,
-          guildId: session.guildId,
-          channelId: session.channelId,
-          messageId: session.messageId,
-          messageContent: session.content,
-          timestamp: new Date(),
-          violationLevel: analysisResult.level,
-          actionTaken: 'pending',
-        });
-        ctx.logger('gipas').debug('违规记录已创建。');
-      } catch (e) { ctx.logger('gipas').error('记录违规信息失败:', e); }
-
-      let actionToTake: 'none' | 'warn' | 'mute' | 'kick' = 'none';
-      let muteMinutesToApply = 0;
-
-      switch (analysisResult.level) {
-        case 1: actionToTake = config.level1Action; muteMinutesToApply = config.level1MuteMinutes; break;
-        case 2: actionToTake = config.level2Action; muteMinutesToApply = config.level2MuteMinutes; break;
-        case 3: actionToTake = config.level3Action; muteMinutesToApply = config.level3MuteMinutes; break;
-        default: 
-          actionToTake = 'warn'; // Default to warn if level is null but violates is true
-          ctx.logger('gipas').warn(`违规等级未识别 (${analysisResult.level})，默认执行警告操作。`);
-          break;
+    if (session.content && session.userId !== session.bot.userId && session.channelId === config.activeChannelId) {
+      // Add message to history
+      messageHistory.push({ user: session.userId, content: session.content, timestamp: new Date() });
+      // Trim history to MAX_HISTORY_MESSAGES
+      if (messageHistory.length > (config.maxChatHistoryLength || MAX_HISTORY_MESSAGES)) {
+        messageHistory.shift(); // Remove the oldest message
       }
-      ctx.logger('gipas').info(`处罚动作确定: ${actionToTake}, 禁言时长 (如适用): ${muteMinutesToApply} 分钟。`);
-      
-      try { 
-        await session.bot.deleteMessage(session.channelId, session.messageId);
-        ctx.logger('gipas').info(`已删除消息 ${session.messageId}。`);
-      } catch (e) { ctx.logger('gipas').warn(`删除消息 ${session.messageId} 失败:`, e); }
-
-      switch (actionToTake) {
-        case 'warn': 
-          session.send(`用户 ${session.userId} 警告：您的消息违反了群规 (等级 ${analysisResult.level})。`); 
-          break;
-        case 'mute':
-          const durationInSeconds = muteMinutesToApply * 60;
-          ctx.logger('gipas').info(`准备禁言用户 ${session.userId} (Guild: ${session.guildId})，时长: ${muteMinutesToApply} 分钟 (${durationInSeconds} 秒)。`);
-          try {
-            await (session.bot as any).invoke('set_group_ban', { group_id: parseInt(session.guildId), user_id: parseInt(session.userId), duration: durationInSeconds });
-            ctx.logger('gipas').info(`用户 ${session.userId} 禁言API调用 (set_group_ban) 成功。`);
-            session.send(`用户 ${session.userId} 因违反群规 (等级 ${analysisResult.level}) 已被禁言 ${muteMinutesToApply} 分钟。`);
-          } catch (e) { 
-            ctx.logger('gipas').error(`禁言用户 ${session.userId} (时长 ${durationInSeconds} 秒) 失败:`, e); 
-            session.send(`尝试禁言用户 ${session.userId} 失败。`); 
-          }
-          break;
-        case 'kick':
-          try {
-            await session.bot.kickGuildMember(session.guildId, session.userId);
-            session.send(`用户 ${session.userId} 因严重违反群规 (等级 ${analysisResult.level}) 已被移出本群。`);
-          } catch (e) { ctx.logger('gipas').error(`踢出用户 ${session.userId} 失败:`, e); session.send(`尝试将用户 ${session.userId} 移出群聊失败。`); }
-          break;
-        case 'none':
-          ctx.logger('gipas').info(`违规等级 ${analysisResult.level} 配置的动作为 'none'，不执行处罚。`);
-          break;
-      }
+      // Remove messages older than MAX_HISTORY_AGE_MS
+      const now = new Date().getTime();
+      messageHistory = messageHistory.filter(msg => (now - msg.timestamp.getTime()) < MAX_HISTORY_AGE_MS);
     }
+    // Pass the relevant part of messageHistory to handleMessage, which will then pass to analyzeChatMessage
+    handleMessage(session, ctx, config, gipasChat, RULES, messageHistory.filter(m => m.user !== session.userId)); // Pass history excluding current user's own recent messages if that's desired, or pass all.
   });
 
-  ctx.on('guild-member-request', async (session) => { /* ... */ });
+  ctx.on('guild-member-request', async (session) => { 
+    // Assuming analyzeJoinRequest is intended to be used here
+    // const analysisResult = await analyzeJoinRequest(session.content, config, ctx, RULES);
+    // Handle join request based on analysisResult
+    /* ... */ 
+  });
 }
