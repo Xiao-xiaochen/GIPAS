@@ -8,19 +8,53 @@ import { Buffer } from 'node:buffer';
 
 async function downloadImageAsBase64(url: string, ctx: Context): Promise<{ mimeType: string, data: string } | null> {
   try {
-    const fetchOptions = { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' } };
-    const response = await fetch(url, fetchOptions);
+    // 尝试移除 User-Agent，某些服务器可能对此敏感
+    // const fetchOptions = { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' } };
+    // const response = await fetch(url, fetchOptions);
+    const response = await fetch(url); // 不带额外请求头尝试
     if (!response.ok) {
-      ctx.logger('gipas').warn(`图片下载失败: ${url}, 状态: ${response.status}`);
-      return null;
+      ctx.logger('gipas').warn(`图片下载失败: ${url}, 状态: ${response.status} ${response.statusText}`);
+      // 尝试使用 Koishi 的 HTTP client 作为备选方案
+      try {
+        ctx.logger('gipas').info(`尝试使用 Koishi HTTP client 下载: ${url}`);
+        const koishiResponse = await ctx.http.get(url, { responseType: 'arraybuffer' });
+        const base64ImageData = Buffer.from(koishiResponse).toString('base64');
+        // Koishi的http client不直接返回headers，mimeType需要从url或内容猜测，或固定为通用类型
+        // 简单的从url后缀获取mimeType
+        let mimeType = 'image/jpeg'; // 默认
+        const extension = url.substring(url.lastIndexOf('.') + 1).toLowerCase();
+        if (extension === 'png') mimeType = 'image/png';
+        else if (extension === 'gif') mimeType = 'image/gif';
+        else if (extension === 'webp') mimeType = 'image/webp';
+        ctx.logger('gipas').info(`Koishi HTTP client 下载成功: ${url}`);
+        return { mimeType, data: base64ImageData };
+      } catch (koishiError) {
+        ctx.logger('gipas').error(`Koishi HTTP client 下载也失败: ${url}:`, koishiError);
+        return null;
+      }
     }
     const imageArrayBuffer = await response.arrayBuffer();
     const base64ImageData = Buffer.from(imageArrayBuffer).toString('base64');
     const mimeType = response.headers.get('content-type') || 'image/jpeg';
     return { mimeType, data: base64ImageData };
   } catch (error) {
-    ctx.logger('gipas').error(`图片下载异常: ${url}:`, error);
-    return null;
+    ctx.logger('gipas').error(`图片下载异常 (fetch): ${url}:`, error);
+    // 如果原始 fetch 失败，也尝试 Koishi HTTP client
+    try {
+      ctx.logger('gipas').info(`原始 fetch 失败，尝试使用 Koishi HTTP client 下载: ${url}`);
+      const koishiResponse = await ctx.http.get(url, { responseType: 'arraybuffer' });
+      const base64ImageData = Buffer.from(koishiResponse).toString('base64');
+      let mimeType = 'image/jpeg';
+      const extension = url.substring(url.lastIndexOf('.') + 1).toLowerCase();
+      if (extension === 'png') mimeType = 'image/png';
+      else if (extension === 'gif') mimeType = 'image/gif';
+      else if (extension === 'webp') mimeType = 'image/webp';
+      ctx.logger('gipas').info(`Koishi HTTP client 下载成功 (作为备选): ${url}`);
+      return { mimeType, data: base64ImageData };
+    } catch (koishiError) {
+      ctx.logger('gipas').error(`Koishi HTTP client 下载也失败 (作为备选): ${url}:`, koishiError);
+      return null;
+    }
   }
 }
 
@@ -57,8 +91,24 @@ export async function analyzeChatMessage(
     let predictionText = "false";
 
     if (imgMatch && imgMatch[1]) {
-      const imageUrl = imgMatch[1];
-      ctx.logger('gipas').debug(`检测到图片。URL: ${imageUrl}, 文本: "${textContent}"`);
+      let imageUrl = imgMatch[1].replace(/&amp;/g, '&'); // Decode HTML entities from regex match
+      ctx.logger('gipas').debug(`初步检测到图片 URL (来自正则, 已解码): ${imageUrl}, 文本: "${textContent}"`);
+
+      // 尝试从 session.elements 获取更可靠的图片 URL
+      if (chatSession && chatSession.elements) {
+        const imageElement = chatSession.elements.find(el => el.type === 'img' || el.type === 'image');
+        if (imageElement && imageElement.attrs && imageElement.attrs.src) {
+          const sessionImageUrl = imageElement.attrs.src;
+          ctx.logger('gipas').debug(`从 session.elements 中获取到图片 URL: ${sessionImageUrl}`);
+          // 简单检查是否看起来像 QQ 的 rkey URL，如果是，可能仍然会失效
+          // 但优先尝试 session 提供的 URL
+          imageUrl = sessionImageUrl;
+        } else {
+          ctx.logger('gipas').debug('在 session.elements 中未找到合适的图片元素或 src 属性。');
+        }
+      }
+
+      ctx.logger('gipas').info(`最终尝试下载的图片 URL: ${imageUrl}`);
       const imageData = await downloadImageAsBase64(imageUrl, ctx);
       if (imageData) {
         const partsForImageAnalysis: Part[] = [ { inlineData: { mimeType: imageData.mimeType, data: imageData.data } } ];
@@ -116,7 +166,7 @@ export async function analyzeChatMessage(
       // The error "ContentUnion is required" suggests the SDK is looking for a specific structure for the content itself.
       // Let's try wrapping the Part[] within a 'message' property.
       const result = await chatSession.sendMessage({ message: [{ text: fullPrompt }] });
-      ctx.logger('gipas').info('Raw AI Result:', result === undefined ? 'undefined' : JSON.stringify(result, null, 2)); // Pretty print for better readability, explicitly handles undefined
+      ctx.logger('gipas').debug('Raw AI Result:', result === undefined ? 'undefined' : JSON.stringify(result, null, 2)); // Pretty print for better readability, explicitly handles undefined
 
       try {
         // Attempt to extract text based on the observed raw AI result structure
@@ -224,16 +274,7 @@ export async function analyzeJoinRequest(joinMessage: string, config: AppConfig,
 }
 
 export function handleMessage(session: Session, ctx: Context, config: AppConfig, gipasChat: any, rules: string, messageHistory?: { user: string, content: string, timestamp: Date }[]) {
-    ctx.logger('gipas').debug(`[MSG_EVENT] 收到消息. CH: ${session.channelId}, ActiveCH: ${config.activeChannelId}, Content: ${!!session.content}, gipasChat: ${!!gipasChat}`);
-
-    if (!config.activeChannelId) {
-      ctx.logger('gipas').debug('[MSG_EVENT] 无激活频道，跳过。');
-      return;
-    }
-    if (session.channelId !== config.activeChannelId) {
       ctx.logger('gipas').debug(`[MSG_EVENT] 消息来自非激活频道 ${session.channelId}，跳过。`);
-      return;
-    }
      if (!session.content) {
       ctx.logger('gipas').debug('[MSG_EVENT] 消息无内容，跳过。');
       return;
@@ -321,7 +362,18 @@ export function handleMessage(session: Session, ctx: Context, config: AppConfig,
               detailedPunishmentText = `禁言 ${muteMinutes} 分钟`;
               ctx.logger('gipas').info(`准备禁言用户 ${userName} (ID: ${session.userId})，时长: ${muteDurationToApply} 秒。`);
               try {
-                await (session.bot as any).invoke('set_group_ban', { group_id: parseInt(session.guildId), user_id: parseInt(session.userId), duration: muteDurationToApply });
+                const bot = session.bot;
+                // Ensure the bot instance is available and has the necessary method for OneBot
+                if (bot && bot.platform === 'onebot' && typeof bot.internal?.setGroupBan === 'function') {
+                  await bot.internal.setGroupBan(session.guildId, session.userId, muteDurationToApply);
+                } else if (bot) {
+                  // Fallback to invoke if direct method is not available or platform is different, though this was the source of the error
+                  ctx.logger('gipas').warn(`尝试使用 'invoke' 方法为平台 ${bot.platform} 执行禁言。`);
+                  await (bot as any).invoke('set_group_ban', { group_id: parseInt(session.guildId), user_id: parseInt(session.userId), duration: muteDurationToApply });
+                } else {
+                  ctx.logger('gipas').error(`禁言失败：无法获取机器人实例。`);
+                  throw new Error('Bot instance not found for muting.');
+                }
                 ctx.logger('gipas').info(`用户 ${userName} (ID: ${session.userId}) 禁言成功。`);
                 outcomeMessageText = `已被禁言 ${muteMinutes} 分钟`;
               } catch (e) {
