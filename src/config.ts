@@ -3,6 +3,8 @@ import { Schema } from 'koishi';
 export interface Config {
     cronTargetChannelId: string; // New: Channel ID for cron jobs
     monitoredChannelIds: string[]; // New: Array of channel IDs to monitor
+    cronBotPlatform?: string; // New: Platform for the bot used in cron jobs
+    cronBotSelfId?: string; // New: Self ID for the bot used in cron jobs
     geminiApiKey: string;
     geminiModel: string;
     muteCron: string;
@@ -24,6 +26,8 @@ export interface Config {
   export const Config: Schema<Config> = Schema.object({
     cronTargetChannelId: Schema.string().description('定时任务目标频道ID').default(''),
     monitoredChannelIds: Schema.array(String).description('需要监控的频道ID列表').default([]),
+    cronBotPlatform: Schema.string().description('定时任务使用的机器人平台 (可选)').default(''),
+    cronBotSelfId: Schema.string().description('定时任务使用的机器人ID (可选)').default(''),
     geminiApiKey: Schema.string().description('Gemini API Key').required(),
     geminiModel: Schema.string().default('gemini-1.5-flash-latest').description('Gemini 模型 ID'),
     muteCron: Schema.string().default('0 18 * * 1-5').description('工作日禁言 Cron').default('0 18 * * 1-5'),

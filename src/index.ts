@@ -98,6 +98,21 @@ export function apply(ctx: Context, config: Config) {
   GeneralMute(ctx, config);
   ctx.logger('gipas').info('插件已加载');
   database(ctx);
+
+  ctx.on('ready', () => {
+    if (!config.cronBotPlatform || !config.cronBotSelfId) {
+      // Attempt to find a suitable bot if not explicitly configured
+      const availableBots = Array.from(ctx.bots.values());
+      if (availableBots.length > 0) {
+        const firstBot = availableBots[0];
+        config.cronBotPlatform = firstBot.platform;
+        config.cronBotSelfId = firstBot.selfId;
+        ctx.logger('gipas').info(`已自动设置定时任务机器人：Platform: ${firstBot.platform}, ID: ${firstBot.selfId}`);
+      } else {
+        ctx.logger('gipas').warn('没有可用的机器人实例，定时任务可能无法执行禁言操作。请检查配置。');
+      }
+    }
+  });
   // let gipasChat: any = null; // Replaced by channelChatSessions
   const channelChatSessions: Map<string, any> = new Map();
   let cronTargetGuildId: string | null = null; // Guild ID for the cron target channel
@@ -330,7 +345,7 @@ export function apply(ctx: Context, config: Config) {
     }
 
     // Pass linkWhitelist to handleMessage
-    //await handleMessage(session, ctx, config, RULES, linkWhitelist, currentMessageHistory);
+    await handleMessage(session, ctx, config, chatSession, RULES, currentMessageHistory);
     return next();
   });
 

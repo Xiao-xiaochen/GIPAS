@@ -9,30 +9,30 @@ export async function setGuildMute(guildId: string, mute: boolean, ctx: Context,
   }
   const actionText = mute ? '禁言' : '解除禁言';
   try {
-    let botPlatform: string;
-    let botId: string;
+    let botPlatform: string | undefined;
+    let botId: string | undefined;
 
     if (session && session.platform && session.selfId) {
       botPlatform = session.platform;
       botId = session.selfId;
       ctx.logger('gipas').debug(`从 session 获取到 platform: ${botPlatform}, selfId: ${botId}`);
+    } else if (config.cronBotPlatform && config.cronBotSelfId) {
+      botPlatform = config.cronBotPlatform;
+      botId = config.cronBotSelfId;
+      ctx.logger('gipas').debug(`从 config 获取到定时任务机器人 platform: ${botPlatform}, selfId: ${botId}`);
     } else {
-      // When session is not available (e.g., in cron jobs), we cannot reliably get platform and selfId.
-      // ctx.platform and ctx.self might not be what we expect, as per previous errors.
-      // For now, log an error and return. A more robust solution for cron might involve
-      // iterating ctx.bots and picking a suitable bot based on config or other criteria.
-      ctx.logger('gipas').error('无法在没有 session 的情况下安全确定机器人 platform 和 selfId 以执行禁言操作。定时任务可能需要特定配置来指定机器人。');
+      ctx.logger('gipas').error('无法确定用于禁言操作的机器人实例。请检查配置或确保在有 session 的上下文调用。');
       return;
     }
 
     if (!botPlatform || !botId) {
-      ctx.logger('gipas').error(`获取到的机器人 platform 或 selfId 为空。Platform: ${botPlatform}, ID: ${botId}`);
-      return;
+       ctx.logger('gipas').error(`获取到的机器人 platform 或 selfId 为空。Platform: ${botPlatform}, ID: ${botId}`);
+       return;
     }
 
     const bot = ctx.bots[`${botPlatform}:${botId}`];
     if (!bot) {
-      ctx.logger('gipas').error(`无法获取机器人实例 (Platform: ${botPlatform}, ID: ${botId})。`);
+      ctx.logger('gipas').error(`无法获取机器人实例 (Platform: ${botPlatform}, ID: ${botId})。请检查机器人是否已连接。`);
       return;
     }
     ctx.logger('gipas').info(`开始为服务器 ${guildId} 执行全体${actionText}操作 (API: set_group_whole_ban)...`);

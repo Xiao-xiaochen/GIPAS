@@ -156,34 +156,33 @@ export async function analyzeChatMessage(
       // For non-streaming `sendMessage`, it might directly take `string | Part[]`.
       // Given the persistent error, and that `ContentUnion` is `string | Part | (string | Part)[]`,
       // my previous attempt `chatSession.sendMessage([{ text: fullPrompt }])` should have been closer if `Part[]` was expected.
-      // Let's re-verify the exact method signature or try a slightly different structure for `Part`.
-      // The error occurs in `_transformers.ts` at `t.tContent`, which processes the content part.
-      // This strongly suggests the `fullPrompt` (when it's a string) or `[{ text: fullPrompt }]` is not being correctly interpreted as valid `Content`.
-
       // Based on documentation for sendMessageStream (https://googleapis.github.io/js-genai/release_docs/classes/chats.Chat.html),
       // it expects an object like { message: 'Why is the sky blue?' } or { message: Part[] }.
       // The non-streaming sendMessage might follow a similar pattern for its parameters, despite not being explicitly documented as such for its top-level argument.
       // The error "ContentUnion is required" suggests the SDK is looking for a specific structure for the content itself.
       // Let's try wrapping the Part[] within a 'message' property.
-      const result = await chatSession.sendMessage({ message: [{ text: fullPrompt }] });
-      ctx.logger('gipas').debug('Raw AI Result:', result === undefined ? 'undefined' : JSON.stringify(result, null, 2)); // Pretty print for better readability, explicitly handles undefined
+      // Correcting the method call to sendMessageStream based on documentation and previous error.
+      const streamResult = await chatSession.sendMessageStream({ message: [{ text: fullPrompt }] });
+      ctx.logger('gipas').debug('Raw AI Stream Result:', streamResult === undefined ? 'undefined' : 'Stream object received');
 
+      let fullResponseText = '';
       try {
-        // Attempt to extract text based on the observed raw AI result structure
-        const text = result?.candidates?.[0]?.content?.parts?.[0]?.text; // Corrected path
-        if (text) {
-          predictionText = text.toLowerCase().trim();
-        } else {
-          // Log a more specific warning if text is not found in the expected path
-          // The old fallback logic mentioned in the replace_block's comments is not directly applicable here,
-          // as the original code already had a specific way of handling missing text.
-          // We retain the logging and default assignment.
-          ctx.logger('gipas').warn('AI response text not found in expected path (result.candidates[0].content.parts[0].text). Full response logged for debugging.'); // Updated path in log message
-          predictionText = ''; // Default to empty string or handle as an error
+        // Process the streamed response
+        for await (const chunk of streamResult) {
+          if (chunk.text) {
+            fullResponseText += chunk.text;
+          }
         }
+        predictionText = fullResponseText.toLowerCase().trim();
+
+        if (!fullResponseText) {
+           ctx.logger('gipas').warn('AI stream response contained no text chunks. Full response logged for debugging.');
+        }
+
       } catch (e) {
-        ctx.logger('gipas').error('Error parsing AI response:', e);
-        ctx.logger('gipas').error('Full AI Response that caused parsing error:', JSON.stringify(result, null, 2));
+        ctx.logger('gipas').error('Error processing AI stream response:', e);
+        // Log the stream object itself if possible, or indicate it was a stream
+        ctx.logger('gipas').error('AI Stream that caused processing error:', streamResult === undefined ? 'undefined' : 'Stream object');
         predictionText = ''; // Default to empty string or handle as an error
       }
 
@@ -361,24 +360,26 @@ export function handleMessage(session: Session, ctx: Context, config: AppConfig,
               const muteMinutes = Math.ceil(muteDurationToApply / 60);
               detailedPunishmentText = `禁言 ${muteMinutes} 分钟`;
               ctx.logger('gipas').info(`准备禁言用户 ${userName} (ID: ${session.userId})，时长: ${muteDurationToApply} 秒。`);
-              try {
-                const bot = session.bot;
-                // Ensure the bot instance is available and has the necessary method for OneBot
-                if (bot && bot.platform === 'onebot' && typeof bot.internal?.setGroupBan === 'function') {
-                  await bot.internal.setGroupBan(session.guildId, session.userId, muteDurationToApply);
-                } else if (bot) {
-                  // Fallback to invoke if direct method is not available or platform is different, though this was the source of the error
-                  ctx.logger('gipas').warn(`尝试使用 'invoke' 方法为平台 ${bot.platform} 执行禁言。`);
-                  await (bot as any).invoke('set_group_ban', { group_id: parseInt(session.guildId), user_id: parseInt(session.userId), duration: muteDurationToApply });
-                } else {
-                  ctx.logger('gipas').error(`禁言失败：无法获取机器人实例。`);
-                  throw new Error('Bot instance not found for muting.');
+              const bot = session.bot;
+              if (!bot) {
+                ctx.logger('gipas').error(`禁言失败：无法获取机器人实例。Session Bot 为空。`);
+                outcomeMessageText = `尝试禁言失败 (机器人实例不可用)`;
+              } else {
+                try {
+                  // Ensure the bot instance is available and has the necessary method for OneBot
+                  if (bot.platform === 'onebot' && typeof bot.internal?.setGroupBan === 'function') {
+                    await bot.internal.setGroupBan(session.guildId, session.userId, muteDurationToApply);
+                  } else {
+                    // Fallback to invoke if direct method is not available or platform is different
+                    ctx.logger('gipas').warn(`尝试使用 'invoke' 方法为平台 ${bot.platform} 执行禁言。`);
+                    await (bot as any).invoke('set_group_ban', { group_id: parseInt(session.guildId), user_id: parseInt(session.userId), duration: muteDurationToApply });
+                  }
+                  ctx.logger('gipas').info(`用户 ${userName} (ID: ${session.userId}) 禁言成功。`);
+                  outcomeMessageText = `已被禁言 ${muteMinutes} 分钟`;
+                } catch (e) {
+                  ctx.logger('gipas').error(`禁言用户 ${userName} (ID: ${session.userId}) 失败:`, e);
+                  outcomeMessageText = `尝试禁言失败`; // detailedPunishmentText (e.g., 禁言 X 分钟) remains the suggestion
                 }
-                ctx.logger('gipas').info(`用户 ${userName} (ID: ${session.userId}) 禁言成功。`);
-                outcomeMessageText = `已被禁言 ${muteMinutes} 分钟`;
-              } catch (e) {
-                ctx.logger('gipas').error(`禁言用户 ${userName} (ID: ${session.userId}) 失败:`, e);
-                outcomeMessageText = `尝试禁言失败`; // detailedPunishmentText (e.g., 禁言 X 分钟) remains the suggestion
               }
             } else {
               detailedPunishmentText = `警告 (因禁言时长无效)`;
