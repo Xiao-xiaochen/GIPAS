@@ -5,6 +5,7 @@ import { Context , Session } from 'koishi'
 import { } from "koishi-plugin-cron"; 
 import { Database } from './models';
 import { Config } from './config';
+export * from './config'
 import * as fs from 'fs';
 import * as path from 'path';
 

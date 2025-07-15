@@ -12,6 +12,7 @@ declare module 'koishi' {
 
 export function Database(ctx: Context) {
   ctx.model.extend('ViolationRecord', {
+    id: { type: 'unsigned' },
     userId: { type: 'string', length: 255 },
     guildId: { type: 'string', length: 255 },
     timestamp: { type: 'timestamp' },
@@ -20,16 +21,19 @@ export function Database(ctx: Context) {
     ActionDescription: { type: 'text'},
     actionTaken: { type: 'string', length: 255 },
   }, { 
-    primary: 'userId' 
+    autoInc: true,
+    primary: 'id' 
   });
 
   ctx.model.extend('UserRecord', {
+    id: { type: 'unsigned' },
     userId: { type: 'string', length: 255 },
     guildId: { type: 'string', length: 255 },
     level1Violations: { type: 'unsigned', initial: 0 },
     level2Violations: { type: 'unsigned', initial: 0 },
     level3Violations: { type: 'unsigned', initial: 0 },
   }, { 
-    primary: 'userId' 
+    autoInc: true,
+    primary: 'id' 
   });
 }

@@ -21,6 +21,7 @@ export interface ViolationAnalysisResult {
 }
 
 export interface UserRecord {
+  id: number;
   userId: string;
   guildId: string;
   level1Violations: number;
@@ -29,6 +30,7 @@ export interface UserRecord {
 };
 
 export interface ViolationRecord {
+  id: number;
   userId: string;
   guildId: string;
   timestamp: Date | number;
