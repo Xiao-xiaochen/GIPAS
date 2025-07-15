@@ -1,47 +1,97 @@
 import { Schema } from 'koishi';
 
 export interface Config {
-    cronTargetChannelId: string; // New: Channel ID for cron jobs
-    monitoredChannelIds: string[]; // New: Array of channel IDs to monitor
-    cronBotPlatform?: string; // New: Platform for the bot used in cron jobs
-    cronBotSelfId?: string; // New: Self ID for the bot used in cron jobs
-    geminiApiKey: string;
-    geminiModel: string;
-    muteCron: string;
-    unmuteCron: string;
-    weekendMuteCron: string;
-    
-    weekendUnmuteCron: string;
-    level1Action: 'none' | 'warn' | 'mute';
-    level1MuteMinutes: number;
-    level2Action: 'warn' | 'mute' | 'kick';
-    level2MuteMinutes: number;
-    level3Action: 'mute' | 'kick';
-    level3MuteMinutes: number; 
-    maxViolationHistoryDays: number; 
-    kickThreshold: number; 
-    maxChatHistoryLength: number; // New config for chat history length
-  }
+  geminiModel: string;
+  geminiApiKey: string;
+
+  MonitoredGuildIds: string[],
+  MaxChatHistoryLength: number;
+  Rules: string
+
+  level1Action: 'warn' | 'mute' | 'kick' | 'guild_mute' | 'none' ;
+  level2Action: 'warn' | 'mute' | 'kick' | 'guild_mute' | 'none' ;
+  level3Action: 'warn' | 'mute' | 'kick' | 'guild_mute' | 'none' ;
+  level1MuteMinutes: number;
+  level2MuteMinutes: number;
+  level3MuteMinutes: number;
+}
   
-  export const Config: Schema<Config> = Schema.object({
-    cronTargetChannelId: Schema.string().description('定时任务目标频道ID').default(''),
-    monitoredChannelIds: Schema.array(String).description('需要监控的频道ID列表').default([]),
-    cronBotPlatform: Schema.string().description('定时任务使用的机器人平台 (可选)').default(''),
-    cronBotSelfId: Schema.string().description('定时任务使用的机器人ID (可选)').default(''),
-    geminiApiKey: Schema.string().description('Gemini API Key').required(),
-    geminiModel: Schema.string().default('gemini-1.5-flash-latest').description('Gemini 模型 ID'),
-    muteCron: Schema.string().default('0 18 * * 1-5').description('工作日禁言 Cron').default('0 18 * * 1-5'),
-    unmuteCron: Schema.string().default('0 0 * * 1-5').description('工作日解除禁言 Cron').default('0 0 * * 1-5'),
-    weekendMuteCron: Schema.string().default('0 8 * * 0,6').description('周末禁言 Cron').default('0 0 * * 0,6'),
-    weekendUnmuteCron: Schema.string().default('0 0 * * 0,6').description('周末解除禁言 Cron').default('0 8 * * 0,6'),
-    level1Action: Schema.union(['none', 'warn', 'mute'] as const).description('1级违规处罚').default('warn'),
-    level1MuteMinutes: Schema.number().description('1级禁言时长(分钟)').default(10),
-    level2Action: Schema.union(['warn', 'mute', 'kick'] as const).description('2级违规处罚').default('mute'),
-    level2MuteMinutes: Schema.number().description('2级禁言时长(分钟)').default(60),
-    level3Action: Schema.union(['mute', 'kick'] as const).description('3级违规处罚').default('kick'),
-    level3MuteMinutes: Schema.number().description('3级禁言时长(分钟)').default(1440),
-    maxViolationHistoryDays: Schema.number().description('历史记录追溯天数(未来功能)').default(30),
-    kickThreshold: Schema.number().description('踢出阈值(未来功能)').default(3),
-    maxChatHistoryLength: Schema.number().description('AI聊天上下文历史记录的最大长度').default(10),
-    // Note: monitoredChannelIds is defined above
-  })
+export const Config:Schema<Config>=Schema.intersect([
+
+  Schema.object({
+    geminiModel: Schema.string().description('模型设置'),
+    geminiApiKey: Schema.string().description('API Key')
+  }).description('AI基础设置'),
+
+  Schema.object({
+    MonitoredGuildIds: Schema.array( Schema.string() ).description('监听的群聊列表'),
+    MaxChatHistoryLength: Schema.number().description( '最大聊天历史记录' ).default( 500 ),
+    Rules: Schema.string().description('通用群规设置').default(`
+一、基本原则
+尊重原则
+尊重他人隐私、信仰、性别、种族及政治立场
+禁止任何形式的人身攻击、歧视性言论或恶意嘲讽
+合法合规
+严格遵守中国法律法规及平台规定
+禁止传播违法违规内容（详见行为规范）
+价值导向
+鼓励知识分享、理性讨论和互助交流
+禁止破坏社群氛围的低质量内容
+二、行为规范（违规等级制度）
+一级违规（警告）
+刷屏/灌水：连续发送5条以上无意义内容
+轻微广告：非商业的个人资源分享（每周≤1次）
+低质量内容：纯表情包/无意义符号占消息量50%以上
+轻微引战：使用挑衅性语言但未针对个人
+二级违规（禁言1-24小时）
+商业广告：未经许可的推广/二维码/引流
+人身攻击：使用侮辱性词汇但未构成严重伤害
+敏感话题：涉及政治/民族/宗教的争议性讨论
+虚假信息：传播未经证实的谣言造成轻微影响
+三级违规（踢出群聊+拉黑）
+违法内容：
+涉黄/涉暴/涉恐图文视频
+赌博/毒品/诈骗相关信息
+破坏国家统一的言论
+严重人身攻击：
+人肉搜索/曝光隐私
+群体歧视/仇恨言论
+持续骚扰威胁成员
+恶意破坏：
+故意传播病毒/钓鱼链接
+组织刷屏攻击
+冒充管理员诈骗
+` ),
+  }).description('自动化管理基础设置'),
+
+  Schema.object({
+    level1Action: Schema.union([
+      Schema.const('warn').description('警告'),
+      Schema.const('mute').description('禁言'),
+      Schema.const('kick').description('踢出'),
+      Schema.const('guild_mute').description('频道禁言'),
+      Schema.const('none').description('无操作'),
+    ]).description('一级违规处罚').default('warn'),
+
+    level2Action: Schema.union([
+      Schema.const('warn').description('警告'),
+      Schema.const('mute').description('禁言'),
+      Schema.const('kick').description('踢出'),
+      Schema.const('guild_mute').description('频道禁言'),
+      Schema.const('none').description('无操作'),
+    ]).description('二级违规处罚').default('mute'),
+
+    level3Action: Schema.union([
+      Schema.const('warn').description('警告'),
+      Schema.const('mute').description('禁言'),
+      Schema.const('kick').description('踢出'),
+      Schema.const('guild_mute').description('频道禁言'),
+      Schema.const('none').description('无操作'),
+    ]).description('三级违规处罚').default('kick'),
+
+    level1MuteMinutes:Schema.number().description('一级禁言时长（分钟）').default( 10 ),
+    level2MuteMinutes:Schema.number().description('二级禁言时长（分钟）').default( 60 ),
+    level3MuteMinutes:Schema.number().description('三级禁言时长（分钟）').default( 180 )
+  }).description('违规处理设置'),
+
+])

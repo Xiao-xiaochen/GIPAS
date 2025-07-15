@@ -1,26 +1,35 @@
 import { Context } from 'koishi';
+import { UserRecord, ViolationRecord } from './type';
 
-export function database(ctx: Context) {
 
-  ctx.model.extend('gipas_violations', {
-    id: 'unsigned',
-    userId: 'string',
-    guildId: 'string',
-    channelId: 'string',
-    messageId: 'string',
-    messageContent: 'text',
-    timestamp: 'timestamp',
-    violationLevel: 'integer',
-    actionTaken: 'string',
-    muteDurationMinutes: 'integer',
-  }, { autoInc: true, primary: 'id' });
+
+declare module 'koishi' {
+  interface Tables {
+    ViolationRecord: ViolationRecord;
+    UserRecord: UserRecord;
+  }
+}
+
+export function Database(ctx: Context) {
+  ctx.model.extend('ViolationRecord', {
+    userId: { type: 'string', length: 255 },
+    guildId: { type: 'string', length: 255 },
+    timestamp: { type: 'timestamp' },
+    MessageContent: { type: 'text'},
+    violationLevel: { type: 'unsigned'},
+    ActionDescription: { type: 'text'},
+    actionTaken: { type: 'string', length: 255 },
+  }, { 
+    primary: 'userId' 
+  });
 
   ctx.model.extend('UserRecord', {
-    id: 'unsigned',
-    userId: 'string',
-    guildId: 'string',
-    level1Violations: 'integer',
-    level2Violations: 'integer',
-    level3Violations: 'integer',
-  }, { autoInc: true, primary: 'id' });
+    userId: { type: 'string', length: 255 },
+    guildId: { type: 'string', length: 255 },
+    level1Violations: { type: 'unsigned', initial: 0 },
+    level2Violations: { type: 'unsigned', initial: 0 },
+    level3Violations: { type: 'unsigned', initial: 0 },
+  }, { 
+    primary: 'userId' 
+  });
 }
