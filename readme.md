@@ -5,6 +5,9 @@
 
 **GIPAS (Group Information Processing Automation System)** 是一款为 Koishi 机器人设计的强大插件，旨在实现群组信息的自动化处理和管理。它利用 Google Gemini AI 模型分析聊天内容，并根据预设规则执行相应的操作，如警告、禁言或踢出用户。
 
+## ！！！项目已经重构，此文档已弃用，仅供参考
+
+
 ## ✨ 功能特性
 
 - **智能内容分析**：集成 Google Gemini AI，能够理解文本和图片内容，判断是否违反群规。

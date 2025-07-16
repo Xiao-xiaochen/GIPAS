@@ -26,7 +26,7 @@ export const Config:Schema<Config>=Schema.intersect([
   Schema.object({
     MonitoredGuildIds: Schema.array( Schema.string() ).description('监听的群聊列表'),
     MaxChatHistoryLength: Schema.number().description( '最大聊天历史记录' ).default( 500 ),
-    Rules: Schema.string().description('通用群规设置').default(`
+    Rules: Schema.string().description('通用群规设置，默认设置不好，请更改').default(`
 一、基本原则
 尊重原则
 尊重他人隐私、信仰、性别、种族及政治立场
@@ -54,7 +54,8 @@ export const Config:Schema<Config>=Schema.intersect([
 组织刷屏攻击
 冒充管理员诈骗
 特别规定：
-可以谈论政治，但是禁止任何可能存在的政治谣言
+可以谈论政治，意识形态，但是禁止任何可能存在的、针对现代政治人物或者政治事件的谣言（古代和近现代的可以），比如某某某遇刺是某某某为了某某某而指示的。注：这些谈论不能直接违反法律，如果是灰色地带或者模棱两可遵从疑罪从无
+可以开纳粹玩笑，用希特勒笑话表情包，但是注意，一旦相关言论、表情直接透露出对这类主义、其暴行、历史事实的歪曲，美化，和正面宣传，都是至少二级违规
 ` ),
   }).description('自动化管理基础设置'),
 

@@ -17,7 +17,7 @@ import { HandleMessage } from './AutomatedManagement/HandleMessage' // HandleMes
 import { GeneralMute } from './ManualManagement/GeneralMute';
 import { ClearReset } from './ManualManagement/ClearRecord';
 
-export const name = 'GIPAS'
+export const name = 'gipas'
 export const inject = { 
   required: [ 'cron', 'database' ] 
 }

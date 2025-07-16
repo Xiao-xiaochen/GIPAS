@@ -35,6 +35,7 @@ export async function AnalyzeMessage (
 
         const baseSystemPromptText = 
 `你是一个群组的聊天管理员。你的任务是根据以下群规，判断我发给你的消息是否违规。
+注意： 上下文判定请酌情判定，轻判，最重要的是遵从疑罪从无原则，你不能在有人发送违规言论下面接着发送了可以的文字就让他连坐
 群规:
 ${rules}
 判断指示:
