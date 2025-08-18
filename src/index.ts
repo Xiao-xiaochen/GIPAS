@@ -14,6 +14,7 @@ import { InitializeChatSession } from './AutomatedManagement/MonitorGroup'
 import { HandleMessage } from './AutomatedManagement/HandleMessage' // HandleMessage 将不再接收 chatSession 参数
 
 // GIPAS手动管理模块
+import { SetTitle } from './ManualManagement/SetTitle'
 import { GeneralMute } from './ManualManagement/GeneralMute';
 import { ClearReset } from './ManualManagement/ClearRecord';
 
@@ -33,6 +34,9 @@ export function apply(ctx: Context, config: Config) {
 
   // GIPAS核心逻辑
   Database(ctx);
+
+  // GIPAS的人工操作功能
+  SetTitle(ctx);
   ClearReset(ctx);
   GeneralMute(ctx, config);
 
