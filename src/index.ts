@@ -40,7 +40,7 @@ export function apply(ctx: Context, config: Config) {
   ClearReset(ctx);
   GeneralMute(ctx, config);
 
-  // 在插件启动时，确保预设群组的消息历史或其他非 Gemini 实例相关的初始化完成
+  // GIPAS的自动化管理功能
   const initializationPromises: Promise<boolean>[] = [];
   const GuildToInit = new Set(config.MonitoredGuildIds); 
   if (config.geminiApiKey) { // 这里虽然检查 API Key，但 InitializeChatSession 不再创建 Gemini 实例
@@ -79,10 +79,11 @@ export function apply(ctx: Context, config: Config) {
     if ( !GuildId ) {
       return;
     };
+
     if ( !config.MonitoredGuildIds.includes( GuildId ) || session.selfId === session.userId ) {
       return next();
     };
-    
+
     // 确保消息历史已初始化
     if ( !GuildMessageHistories.has( GuildId ) ) {
       ctx.logger('gipas').info(`消息触发群组 ${GuildId} 消息历史初始化...`);
