@@ -48,7 +48,8 @@ export async function ParseProfileWithAI(
 "真实姓名：张三
 第几届学生：2023
 班级：计算机科学1班
-自我描述：我是一名软件工程师，喜欢编程和旅行。"
+自我描述：我是一名软件工程师，喜欢编程和旅行。
+是否公开：是"
 
 你应该返回:
 {
@@ -61,12 +62,16 @@ export async function ParseProfileWithAI(
 
 如果输入是:
 "真实姓名：李四
+第几届学生：2022
+班级：软件工程2班
 自我描述：喜欢阅读和电影。
 是否公开：否"
 
 你应该返回:
 {
   "realname": "李四",
+  "Term": "2022",
+  "Class": "软件工程2班",
   "SelfDescription": "喜欢阅读和电影。",
   "isPublic": false
 }

@@ -62,7 +62,8 @@ export function FileSystem( ctx: Context , config: Config ) {
         '真实姓名：内容\n' +
         '第几届学生：内容\n' +
         '班级：内容\n' +
-        '自我描述：内容'
+        '自我描述：内容\n' +
+        '是否公开：是/否'
       )
     })
 
@@ -110,6 +111,88 @@ export function FileSystem( ctx: Context , config: Config ) {
       return h.at(userId) + ` 档案格式似乎有误：${error.message}\n请检查后重新提交，无需重新申请。`
     }
   })
+
+  // 查看自己的档案
+  ctx.command('我的档案', '查看自己的档案')
+    .action(async ({ session }) => {
+      const { userId, guildId } = session
+      if (!guildId || !config.enabledGroups.includes(guildId)) {
+        return '本群未启用同学档案功能。'
+      }
+
+      const profiles = await ctx.database.select('FileSystem')
+        .where({ userId, groupId: guildId })
+        .execute()
+
+      if (!profiles || profiles.length === 0) {
+        return '你还没有创建档案，请使用"申请档案"创建。'
+      }
+
+      const data = profiles[0]
+      
+      return (
+        `你的资料：\n` +
+        `ID：${data.userId}\n` +
+        `■真实姓名：${data.realname}\n` +
+        `□届数：${data.Term}\n` +
+        `□班级：${data.Class}\n` +
+        `■自我描述：\n${data.SelfDescription}\n` +
+        `■监督性评分：${data.supervisionRating || 100} 分\n` +
+        `■积极性评分：${data.positivityRating || 100} 分\n` +
+        `■档案状态：${data.isPublic ? '公开' : '不公开'}`
+      )
+    })
+
+  // 查看他人评分
+  ctx.command('他的群评分 [targetUser:user]', '查看指定用户的群内评分')
+    .action(async ({ session }, targetUser) => {
+      const { guildId } = session
+      if (!guildId || !config.enabledGroups.includes(guildId)) {
+        return '本群未启用同学档案功能。'
+      }
+
+      let targetUserId: string | null = null;
+      
+      if (targetUser) {
+        logger.info(`原始targetUser: ${targetUser}`);
+        if (typeof targetUser === 'string') {
+          const parts = targetUser.split(':');
+          targetUserId = parts[parts.length - 1];
+        }
+        logger.info(`解析后targetUserId: ${targetUserId}`);
+      } else {
+        return '请指定要查看的用户，例如：他的群评分 @用户名'
+      }
+
+      if (!targetUserId) {
+        return '请指定要查看的用户，例如：他的群评分 @用户名'
+      }
+
+      const profiles = await ctx.database.select('FileSystem')
+        .where({ userId: targetUserId, groupId: guildId })
+        .execute()
+
+      if (!profiles || profiles.length === 0) {
+        return '未找到该用户的档案。'
+      }
+
+      const data = profiles[0]
+      
+      // 获取目标用户的昵称或名称
+      let authorName = '该用户'
+      try {
+        const targetUserInfo = await session.bot.getUser(targetUserId)
+        authorName = targetUserInfo?.name || targetUserInfo?.nick || '该用户'
+      } catch (error) {
+        authorName = '该用户'
+      }
+
+      return (
+        `${authorName} 的群内评分：\n` +
+        `■监督性评分：${data.supervisionRating || 100} 分\n` +
+        `■积极性评分：${data.positivityRating || 100} 分`
+      )
+    })
 
   // 查看档案
   ctx.command('查看档案 [targetUser:user]', '查看指定用户的档案')

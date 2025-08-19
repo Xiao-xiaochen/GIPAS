@@ -13,6 +13,7 @@ import * as path from 'path';
 import { InitializeChatSession } from './AutomatedManagement/MonitorGroup'
 import { HandleMessage } from './AutomatedManagement/HandleMessage' // HandleMessage 将不再接收 chatSession 参数
 import { FileSystem } from './AutomatedManagement/GroupFileSystem/ApplyFile' // 引入文件系统模块
+import { ZanSystem } from './AutomatedManagement/GroupFileSystem/Zan' // 引入点赞系统模块
 
 // GIPAS手动管理模块
 import { SetTitle } from './ManualManagement/SetTitle'
@@ -39,6 +40,7 @@ export function apply(ctx: Context, config: Config) {
   // GIPAS核心逻辑
   Database(ctx);
   FileSystem(ctx, config);
+  ZanSystem(ctx, config);
 
   // GIPAS的人工操作功能
   SetTitle(ctx);
