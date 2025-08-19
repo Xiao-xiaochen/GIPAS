@@ -94,7 +94,14 @@ export async function ParseProfileWithAI(
 
         // Attempt to parse the AI's response as JSON
         try {
-            const parsedResult: ParsedProfile = JSON.parse(predictionText);
+            // Remove markdown code block wrappers if present
+            let jsonString = predictionText;
+            const jsonMatch = predictionText.match(/```json\s*([\s\S]*?)\s*```/);
+            if (jsonMatch && jsonMatch[1]) {
+                jsonString = jsonMatch[1];
+            }
+
+            const parsedResult: ParsedProfile = JSON.parse(jsonString);
             return parsedResult;
         } catch (jsonError) {
             ctx.logger('gipas').error('AI返回的不是有效的JSON格式:', jsonError);

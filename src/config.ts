@@ -4,6 +4,9 @@ export interface Config {
   geminiModel: string;
   geminiApiKey: string;
 
+  enabledGroups: string[]
+  applicationTimeout: number
+
   MonitoredGuildIds: string[],
   MaxChatHistoryLength: number;
   Rules: string
@@ -22,6 +25,11 @@ export const Config:Schema<Config>=Schema.intersect([
     geminiModel: Schema.string().description('模型设置'),
     geminiApiKey: Schema.string().description('API Key')
   }).description('AI基础设置'),
+
+  Schema.object({
+    enabledGroups: Schema.array(String).description('启用此功能的群组 ID 列表。'),
+    applicationTimeout: Schema.number().default(30).description('档案填写申请的有效时间（分钟）'),
+  }).description('档案填写申请设置'),
 
   Schema.object({
     MonitoredGuildIds: Schema.array( Schema.string() ).description('监听的群聊列表'),

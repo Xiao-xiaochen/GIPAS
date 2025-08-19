@@ -39,3 +39,19 @@ export interface ViolationRecord {
   ActionDescription: string;
   actionTaken: string;
 };
+
+export interface FileSystem {
+  userId: string;
+  groupId: string;
+
+  realname: string;
+  Netname: string;
+
+  Term: string;
+  Class: string;
+
+  SelfDescription: string;
+
+  GroupSupervisoryRating: number;
+  isPublic: boolean;
+}

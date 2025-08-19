@@ -1,6 +1,6 @@
 import { Context, h } from 'koishi'
 import { Config } from '../../config'
-import { ParseProfileWithAI, ParsedProfile } from './parseProfileWithAI' // 导入AI解析函数和类型
+import { ParseProfileWithAI, ParsedProfile } from './ParseProfileWithAI' // 导入AI解析函数和类型
 
 
 // 存储用户申请状态
@@ -121,9 +121,12 @@ export function FileSystem( ctx: Context , config: Config ) {
         return '本群未启用同学档案功能。'
       }
 
-      const targetId = target ? h.select(target, 'user').map(el => el.attrs.id).join('') : session.userId
+      // 如果提供了 target (即 @了某人)，则直接使用 target 作为用户ID，否则使用 session.userId
+      const targetId = target || session.userId
 
-      if (!targetId) return '请指定要查看的用户。'
+      if (!targetId) {
+        return '请指定要查看的用户。'
+      }
 
       const profile = await ctx.database.get('FileSystem', { userId: targetId })
 
@@ -138,7 +141,15 @@ export function FileSystem( ctx: Context , config: Config ) {
         return '该用户的档案设置为不公开，你无法查看。'
       }
       
-      const authorName = target ? ( h.select(target, 'user')[0]?.children[0] as unknown as string || '该用户' ) : '你'
+      // 获取目标用户的昵称或名称
+      let authorName = '该用户'
+      if (targetId === session.userId) {
+        authorName = '你'
+      } else {
+        // 尝试从会话中获取目标用户的名称，如果无法获取则显示默认值
+        const targetUser = await session.bot.getUser(targetId)
+        authorName = targetUser?.name || targetUser?.nick || '该用户'
+      }
 
       // 格式化输出
       return (
