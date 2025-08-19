@@ -8,7 +8,6 @@ import { Config } from '../../config';
 // the actual structure would depend on what kind of profiles are being parsed.
 export interface ParsedProfile {
     realname?: string;
-    Netname?: string;
     Term?: string;
     Class?: string;
     SelfDescription?: string;
@@ -37,27 +36,23 @@ export async function ParseProfileWithAI(
 `你是一个专业的个人资料解析器。你的任务是从提供的文本中提取个人资料信息，并将其格式化为JSON对象。
 请提取以下字段：
 - realname: 用户的真实姓名 (字符串)
-- Netname: 用户的网名 (字符串)
 - Term: 用户是第几届学生 (字符串)
 - Class: 用户的班级 (字符串)
 - SelfDescription: 用户的自我描述 (字符串)
-- isPublic: 档案是否公开 (布尔值，'是'/'公开'/'true'/'yes'/'public' 对应 true，'否'/'不公开'/'false'/'no'/'private' 对应 false)
+- isPublic: 档案是否公开 (布尔值，'是'/'公开'/'true'/'yes'/'public' 对应 true，'否'/'不公开'/'false'/'no'/'private' 对应 false，默认为true)
 
 如果某个字段在提供的文本中找不到，请将其省略。
 请确保输出严格遵循JSON格式，并且只包含JSON对象本身，不包含任何额外的解释性文本。
 
 例如，如果输入是:
 "真实姓名：张三
-网名：小三
 第几届学生：2023
 班级：计算机科学1班
-自我描述：我是一名软件工程师，喜欢编程和旅行。
-是否公开：是"
+自我描述：我是一名软件工程师，喜欢编程和旅行。"
 
 你应该返回:
 {
   "realname": "张三",
-  "Netname": "小三",
   "Term": "2023",
   "Class": "计算机科学1班",
   "SelfDescription": "我是一名软件工程师，喜欢编程和旅行。",
@@ -65,13 +60,13 @@ export async function ParseProfileWithAI(
 }
 
 如果输入是:
-"网名：李四
+"真实姓名：李四
 自我描述：喜欢阅读和电影。
 是否公开：否"
 
 你应该返回:
 {
-  "Netname": "李四",
+  "realname": "李四",
   "SelfDescription": "喜欢阅读和电影。",
   "isPublic": false
 }

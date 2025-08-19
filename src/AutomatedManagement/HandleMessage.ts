@@ -52,4 +52,57 @@ export async function HandleMessage (
     ctx.logger( 'gipas' ).error( '记录违规信息到数据库失败:', error );
   };
 
+  // 如果启用了档案系统，扣除用户的监督性评分和积极性评分
+  if (config.enabledGroups.includes(session.guildId)) {
+    try {
+      const userProfile = await ctx.database.get('FileSystem', { 
+        userId: session.userId,
+        groupId: session.guildId 
+      });
+      
+      if (userProfile && userProfile.length > 0) {
+        const profile = userProfile[0];
+        
+        // 使用AI建议的扣分数量，如果AI没有提供则使用默认值
+        let supervisionDeduction = analysisResult.supervisionDeduction;
+        let positivityDeduction = analysisResult.positivityDeduction;
+        
+        // 如果AI没有提供扣分建议，使用默认规则
+        if (supervisionDeduction === undefined || positivityDeduction === undefined) {
+          switch (analysisResult.level) {
+            case 1:
+              supervisionDeduction = supervisionDeduction || 5;
+              positivityDeduction = positivityDeduction || 2;
+              break;
+            case 2:
+              supervisionDeduction = supervisionDeduction || 15;
+              positivityDeduction = positivityDeduction || 5;
+              break;
+            case 3:
+              supervisionDeduction = supervisionDeduction || 30;
+              positivityDeduction = positivityDeduction || 10;
+              break;
+          }
+        }
+        
+        // 计算新的评分，确保不低于0
+        const newSupervisionRating = Math.max(0, (profile.supervisionRating || 100) - supervisionDeduction);
+        const newPositivityRating = Math.max(0, (profile.positivityRating || 100) - positivityDeduction);
+        
+        // 更新数据库
+        await ctx.database.set('FileSystem', { 
+          userId: session.userId,
+          groupId: session.guildId 
+        }, { 
+          supervisionRating: newSupervisionRating,
+          positivityRating: newPositivityRating
+        });
+        
+        ctx.logger('gipas').info(`用户 ${session.userId} 因违规扣除评分 - 监督性: -${supervisionDeduction} (${newSupervisionRating}), 积极性: -${positivityDeduction} (${newPositivityRating})`);
+      }
+    } catch (error) {
+      ctx.logger('gipas').error('更新用户档案评分失败:', error);
+    }
+  }
+
 }

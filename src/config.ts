@@ -17,6 +17,20 @@ export interface Config {
   level1MuteMinutes: number;
   level2MuteMinutes: number;
   level3MuteMinutes: number;
+
+  timedMuteGroups: Array<{
+    guildId: string;
+    schedule1: {
+      enabled: boolean;
+      muteTime: string;
+      unmuteTime: string;
+    };
+    schedule2: {
+      enabled: boolean;
+      muteTime: string;
+      unmuteTime: string;
+    };
+  }>;
 }
   
 export const Config:Schema<Config>=Schema.intersect([
@@ -92,9 +106,25 @@ export const Config:Schema<Config>=Schema.intersect([
       Schema.const('none').description('无操作'),
     ]).description('三级违规处罚').default('kick'),
 
-    level1MuteMinutes:Schema.number().description('一级禁言时长（分钟）').default( 10 ),
-    level2MuteMinutes:Schema.number().description('二级禁言时长（分钟）').default( 60 ),
-    level3MuteMinutes:Schema.number().description('三级禁言时长（分钟）').default( 180 )
+    level1MuteMinutes: Schema.number().description('一级禁言时长（分钟）').default(10),
+    level2MuteMinutes: Schema.number().description('二级禁言时长（分钟）').default(60),
+    level3MuteMinutes: Schema.number().description('三级禁言时长（分钟）').default(180)
   }).description('违规处理设置'),
+
+  Schema.object({
+    timedMuteGroups: Schema.array(Schema.object({
+      guildId: Schema.string().description('群组ID'),
+      schedule1: Schema.object({
+        enabled: Schema.boolean().description('启用第一组定时').default(false),
+        muteTime: Schema.string().description('禁言时间 (cron格式)').default('0 0 0 * * *'),
+        unmuteTime: Schema.string().description('解禁时间 (cron格式)').default('0 0 5 * * *')
+      }).description('第一组定时设置'),
+      schedule2: Schema.object({
+        enabled: Schema.boolean().description('启用第二组定时').default(false),
+        muteTime: Schema.string().description('禁言时间 (cron格式)').default('0 15 7 * * *'),
+        unmuteTime: Schema.string().description('解禁时间 (cron格式)').default('0 30 16 * * *')
+      }).description('第二组定时设置')
+    })).description('定时禁言群组配置').default([])
+  }).description('定时禁言设置')
 
 ])

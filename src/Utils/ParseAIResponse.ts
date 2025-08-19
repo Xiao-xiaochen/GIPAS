@@ -32,7 +32,9 @@ export function ParseAIResponse(predictionText: string, config: Config, ctx: Con
 
   const actionStr = parts[2]?.toLowerCase();
   const durationStr = parts[3]?.toLowerCase();
-  const reason = parts.length > 4 ? parts.slice(4).join(', ').trim() : `AI判定违规 (等级 ${level})`;
+  const reason = parts.length > 4 ? parts[4].trim() : `AI判定违规 (等级 ${level})`;
+  const supervisionDeduction = parts.length > 5 ? parseInt(parts[5], 10) : undefined;
+  const positivityDeduction = parts.length > 6 ? parseInt(parts[6], 10) : undefined;
 
   let action: ViolationAnalysisResult['action'] = level1Action
   let muteDuration: number | undefined;
@@ -67,5 +69,14 @@ export function ParseAIResponse(predictionText: string, config: Config, ctx: Con
         break;
     }
   }
-  return { is_violation: true, level, action, muteDuration, reason };
+  
+  return { 
+    is_violation: true, 
+    level, 
+    action, 
+    muteDuration, 
+    reason,
+    supervisionDeduction: supervisionDeduction && !isNaN(supervisionDeduction) ? supervisionDeduction : undefined,
+    positivityDeduction: positivityDeduction && !isNaN(positivityDeduction) ? positivityDeduction : undefined
+  };
 }

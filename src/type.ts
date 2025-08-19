@@ -18,6 +18,8 @@ export interface ViolationAnalysisResult {
   action: 'warn' | 'mute' | 'kick' | 'guild_mute' | 'none'
   muteDuration?: number;
   reason?: string;
+  supervisionDeduction?: number; // AI建议的监督性评分扣除数量
+  positivityDeduction?: number; // AI建议的积极性评分扣除数量
 }
 
 export interface UserRecord {
@@ -45,13 +47,11 @@ export interface FileSystem {
   groupId: string;
 
   realname: string;
-  Netname: string;
-
   Term: string;
   Class: string;
-
   SelfDescription: string;
 
-  GroupSupervisoryRating: number;
+  supervisionRating: number; // 监督性评级，初始值100分，最高100分
+  positivityRating: number; // 积极性评分，初始值100分，最高100分
   isPublic: boolean;
 }

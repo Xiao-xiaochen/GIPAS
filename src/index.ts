@@ -19,6 +19,9 @@ import { SetTitle } from './ManualManagement/SetTitle'
 import { GeneralMute } from './ManualManagement/GeneralMute';
 import { ClearReset } from './ManualManagement/ClearRecord';
 
+// GIPAS定时管理模块
+import { TimedMute } from './AutomatedManagement/TimedMute';
+
 export const name = 'gipas'
 export const inject = { 
   required: [ 'cron', 'database' ] 
@@ -41,6 +44,9 @@ export function apply(ctx: Context, config: Config) {
   SetTitle(ctx);
   ClearReset(ctx);
   GeneralMute(ctx, config);
+
+  // GIPAS的定时管理功能
+  TimedMute(ctx, config);
 
   // GIPAS的自动化管理功能
   const initializationPromises: Promise<boolean>[] = [];

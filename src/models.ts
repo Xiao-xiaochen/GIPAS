@@ -39,15 +39,15 @@ export function Database(ctx: Context) {
   });
 
   ctx.model.extend( 'FileSystem' , {
-    userId: { type: 'string' },
-    groupId: { type: 'string' },
+    userId: { type: 'string', length: 255 },
+    groupId: { type: 'string', length: 255 },
     realname: { type: 'string' },
-    Netname: { type: 'string' },
     Term: { type: 'string' },
     Class: { type: 'string' },
     SelfDescription: { type: 'text' },
-    GroupSupervisoryRating: { type: 'unsigned', initial: 0 },
-    isPublic: { type: 'boolean', initial: false },
+    supervisionRating: { type: 'unsigned', initial: 100 }, // 监督性评级，初始值100分
+    positivityRating: { type: 'unsigned', initial: 30 }, // 积极性评分，初始值100分
+    isPublic: { type: 'boolean', initial: true }, // 默认公开
   }, { 
     primary: 'userId' 
   });
