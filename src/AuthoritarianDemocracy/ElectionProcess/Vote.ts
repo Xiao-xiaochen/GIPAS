@@ -116,7 +116,7 @@ export function VotingSystem(ctx: Context, config: Config) {
       const candidateClass = candidate[0].classNumber;
 
       let message = `✅ 投票成功！\n\n`;
-      message += `🗳️ 您投给了: ${candidateCode} - ${candidateName} (${candidateClass}班)\n`;
+      message += `🗳️ 您投给了: ${candidateCode} - ${candidateName} (${candidateClass})\n`;
       message += `📊 投票方式: ${isPublic ? '公开投票' : '私密投票'}\n`;
       message += `⏰ 投票时间: ${new Date().toLocaleString('zh-CN')}\n\n`;
       message += `💡 投票已记录，无法修改`;
@@ -126,7 +126,7 @@ export function VotingSystem(ctx: Context, config: Config) {
         const bot = ctx.bots.find(bot => bot.platform === 'onebot');
         if (bot) {
           const voterName = voterProfile[0].realname;
-          const publicMessage = `🗳️ ${voterName} 投票给了 ${candidateCode} - ${candidateName} (${candidateClass}班)`;
+          const publicMessage = `🗳️ ${voterName} 投票给了 ${candidateCode} - ${candidateName} (${candidateClass})`;
           await bot.sendMessage(guildId, publicMessage);
         }
       }
@@ -233,7 +233,7 @@ export function VotingSystem(ctx: Context, config: Config) {
         
         for (const classNum of sortedClasses) {
           const classCandidates = statsByClass.get(classNum)!;
-          message += `🏫 ${classNum}班:\n`;
+          message += `🏫 ${classNum}:\n`;
           
           // 按得票数排序
           classCandidates.sort((a, b) => b.votes - a.votes);
@@ -365,7 +365,7 @@ export function VotingSystem(ctx: Context, config: Config) {
           let message = `🎉 选举结果公布！\n\n`;
           
           for (const classResult of results.classwiseResults) {
-            message += `🏫 ${classResult.classNumber}班:\n`;
+            message += `🏫 ${classResult.classNumber}:\n`;
             if (classResult.winner) {
               message += `  🏆 当选: ${classResult.winner.name} (${classResult.winner.code}) - ${classResult.winner.votes}票\n`;
             } else {

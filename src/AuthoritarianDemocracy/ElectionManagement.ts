@@ -52,14 +52,14 @@ export function ElectionManagement(ctx: Context, config: Config) {
               classNumber: admin.classNumber
             });
 
-            message += `✅ ${adminName} (${admin.classNumber}班) - 需要同步\n`;
+            message += `✅ ${adminName} (${admin.classNumber}) - 需要同步\n`;
           } catch (error) {
             syncErrors.push({
               userId: admin.userId,
               name: adminName,
               error: error.message
             });
-            message += `❌ ${adminName} (${admin.classNumber}班) - 检查失败\n`;
+            message += `❌ ${adminName} (${admin.classNumber}) - 检查失败\n`;
           }
         }
 
@@ -113,7 +113,7 @@ export function ElectionManagement(ctx: Context, config: Config) {
                 groupId: session.guildId
               });
               const adminName = adminProfile.length > 0 ? adminProfile[0].realname : '未知管理员';
-              message += `  • ${adminName} (${admin.classNumber}班)\n`;
+              message += `  • ${adminName} (${admin.classNumber})\n`;
             }
           }
         }
@@ -128,7 +128,7 @@ export function ElectionManagement(ctx: Context, config: Config) {
                 groupId: session.guildId
               });
               const adminName = adminProfile.length > 0 ? adminProfile[0].realname : '未知管理员';
-              message += `  • ${adminName} (${admin.classNumber}班)\n`;
+              message += `  • ${adminName} (${admin.classNumber})\n`;
             }
           }
         }
@@ -190,7 +190,7 @@ export function ElectionManagement(ctx: Context, config: Config) {
           message += `  • 班级分布: `;
           const classDistribution = Array.from(adminsByClass.entries())
             .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
-            .map(([classNum, count]) => `${classNum}班(${count}人)`)
+            .map(([classNum, count]) => `${classNum}(${count}人)`)
             .join(', ');
           message += classDistribution + '\n';
         }
@@ -225,7 +225,7 @@ export function ElectionManagement(ctx: Context, config: Config) {
           }
           const candidateDistribution = Array.from(candidatesByClass.entries())
             .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
-            .map(([classNum, count]) => `${classNum}班(${count}人)`)
+            .map(([classNum, count]) => `${classNum}(${count}人)`)
             .join(', ');
           message += `  • 班级分布: ${candidateDistribution}\n`;
         }

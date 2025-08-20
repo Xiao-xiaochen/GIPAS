@@ -24,11 +24,14 @@ import { ClearReset } from './ManualManagement/ClearRecord';
 import { TimedMute } from './AutomatedManagement/TimedMute';
 
 // GIPAS威权民主选举模块
+// GIPAS威权民主选举模块
 import { RegularPowerTransfer } from './AuthoritarianDemocracy/RegularPowerTransfer';
 import { CandidateManagement } from './AuthoritarianDemocracy/ElectionProcess/Candidate';
 import { VotingSystem } from './AuthoritarianDemocracy/ElectionProcess/Vote';
 import { ReelectionPoll } from './AuthoritarianDemocracy/ElectionProcess/Poll';
 import { ElectionManagement } from './AuthoritarianDemocracy/ElectionManagement';
+import { enhanceElectionDisplay } from './Utils/ElectionIdParser';
+import { addDataFixCommands } from './Utils/FixCandidateData';
 
 export const name = 'gipas'
 export const inject = { 
@@ -58,12 +61,15 @@ export function apply(ctx: Context, config: Config) {
   TimedMute(ctx, config);
 
   // GIPAS的威权民主选举功能
+  // GIPAS的威权民主选举功能
   // 威权民主选举系统
   RegularPowerTransfer(ctx, config);
   CandidateManagement(ctx, config);
   VotingSystem(ctx, config);
   ReelectionPoll(ctx, config);
   ElectionManagement(ctx, config);
+  enhanceElectionDisplay(ctx); // 人性化选举ID显示
+  addDataFixCommands(ctx); // 候选人数据修复工具
 
   // GIPAS的自动化管理功能
   const initializationPromises: Promise<boolean>[] = [];

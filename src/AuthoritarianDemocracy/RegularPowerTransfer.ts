@@ -1,5 +1,6 @@
 import { Context } from 'koishi';
 import { Config } from '../config';
+import { ElectionIdParser } from '../Utils/ElectionIdParser';
 
 export function RegularPowerTransfer(ctx: Context, config: Config) {
   const logger = ctx.logger('gipas:power-transfer');
@@ -192,8 +193,11 @@ export function RegularPowerTransfer(ctx: Context, config: Config) {
 
         let statusMessage = '📊 选举状态:\n\n';
         for (const election of elections) {
-          statusMessage += `🗳️ 选举ID: ${election.electionId}\n`;
-          statusMessage += `📋 类型: ${election.electionType === 'initial' ? '初选' : '连任选举'}\n`;
+          const friendlyName = ElectionIdParser.getFriendlyName(election.electionId, election.electionType);
+          const shortName = ElectionIdParser.getShortName(election.electionId);
+          
+          statusMessage += `🗳️ ${friendlyName}\n`;
+          statusMessage += `🏷️ 简称: ${shortName}\n`;
           statusMessage += `📍 状态: ${getStatusText(election.status)}\n`;
           
           if (election.candidateRegistrationEndTime) {

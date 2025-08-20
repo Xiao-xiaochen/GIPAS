@@ -70,15 +70,20 @@ export function CandidateManagement(ctx: Context, config: Config) {
           return '❌ 您已经报名参选了\n💡 使用 "撤销参选" 可以取消报名';
         }
 
-        // 生成候选人编号
-        const classNumber = profile.Class;
+        // 标准化班级格式 - 统一为纯数字
+        let classNumber = profile.Class.replace(/[^\d]/g, ''); // 移除所有非数字字符
+        if (!classNumber) {
+          return '❌ 档案中班级格式错误，请联系管理员更新档案';
+        }
+
+        // 生成候选人编号 - 格式：班级数字 + 两位序号 (如: 701, 702, 801, 802)
         const existingClassCandidates = await ctx.database.get('ElectionCandidate', {
           electionId: election.electionId,
           classNumber: classNumber
         });
 
         const candidateSequence = existingClassCandidates.length + 1;
-        const candidateCode = `${classNumber.padStart(1, '0')}${candidateSequence.toString().padStart(2, '0')}`;
+        const candidateCode = `${classNumber}${candidateSequence.toString().padStart(2, '0')}`;
 
         // 创建候选人记录
         await ctx.database.create('ElectionCandidate', {
@@ -88,13 +93,14 @@ export function CandidateManagement(ctx: Context, config: Config) {
           candidateCode: candidateCode,
           classNumber: classNumber,
           manifesto: manifesto || '暂无竞选宣言',
+          applicationTime: new Date(),
           isApproved: true // 自动批准，也可以设置为需要管理员审核
         });
 
         let message = `✅ 报名成功！\n\n`;
         message += `🏷️ 候选人编号: ${candidateCode}\n`;
         message += `👤 姓名: ${profile.realname}\n`;
-        message += `🏫 班级: ${classNumber}\n`;
+        message += `🏫 班级: ${classNumber}班\n`;
         message += `📊 监督性评分: ${profile.supervisionRating}/100\n`;
         message += `📈 积极性评分: ${profile.positivityRating}/100\n`;
         
@@ -110,7 +116,7 @@ export function CandidateManagement(ctx: Context, config: Config) {
         if (bot) {
           const publicMessage = `🎯 新候选人报名！\n\n` +
             `🏷️ 编号: ${candidateCode}\n` +
-            `👤 ${profile.realname} (${classNumber})\n` +
+            `👤 ${profile.realname} (${classNumber}班)\n` +
             (manifesto ? `📝 宣言: ${manifesto}` : '');
           
           await bot.sendMessage(session.guildId, publicMessage);
@@ -246,7 +252,7 @@ export function CandidateManagement(ctx: Context, config: Config) {
         
         for (const classNum of sortedClasses) {
           const classCandidates = candidatesByClass.get(classNum)!;
-          message += `🏫 ${classNum} (${classCandidates.length}人):\n`;
+          message += `🏫 ${classNum}班 (${classCandidates.length}人):\n`;
           
           for (const candidate of classCandidates) {
             message += `  🔢 ${candidate.candidateCode} - ${candidate.profile.realname}\n`;
@@ -254,7 +260,9 @@ export function CandidateManagement(ctx: Context, config: Config) {
             if (candidate.manifesto && candidate.manifesto !== '暂无竞选宣言') {
               message += `    📝 宣言: ${candidate.manifesto}\n`;
             }
-            message += `    ⏰ 报名时间: ${new Date(candidate.registrationTime).toLocaleString('zh-CN')}\n`;
+            // 修复时间显示问题
+            const applicationTime = candidate.applicationTime ? new Date(candidate.applicationTime) : new Date();
+            message += `    ⏰ 报名时间: ${applicationTime.toLocaleString('zh-CN')}\n`;
           }
           message += '\n';
         }
