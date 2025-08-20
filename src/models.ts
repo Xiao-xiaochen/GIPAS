@@ -1,5 +1,5 @@
 import { Context } from 'koishi';
-import { UserRecord, ViolationRecord , FileSystem } from './type';
+import { UserRecord, ViolationRecord, FileSystem, ElectionCandidate, ElectionVote, Election, Administrator, ReelectionVote } from './type';
 
 
 
@@ -8,6 +8,11 @@ declare module 'koishi' {
     ViolationRecord: ViolationRecord;
     UserRecord: UserRecord;
     FileSystem: FileSystem;
+    ElectionCandidate: ElectionCandidate;
+    ElectionVote: ElectionVote;
+    Election: Election;
+    Administrator: Administrator;
+    ReelectionVote: ReelectionVote;
   }
 }
 
@@ -50,5 +55,81 @@ export function Database(ctx: Context) {
     isPublic: { type: 'boolean', initial: true }, // 默认公开
   }, { 
     primary: 'userId' 
+  });
+
+  // 选举候选人表
+  ctx.model.extend('ElectionCandidate', {
+    id: { type: 'unsigned' },
+    electionId: { type: 'string', length: 255 },
+    userId: { type: 'string', length: 255 },
+    guildId: { type: 'string', length: 255 },
+    classNumber: { type: 'string', length: 10 },
+    candidateCode: { type: 'string', length: 10 },
+    applicationTime: { type: 'timestamp' },
+    isApproved: { type: 'boolean', initial: false },
+    manifesto: { type: 'text' }
+  }, {
+    autoInc: true,
+    primary: 'id'
+  });
+
+  // 选举投票表
+  // 选举投票表
+  ctx.model.extend('ElectionVote', {
+    id: { type: 'unsigned' },
+    electionId: { type: 'string', length: 255 },
+    voterId: { type: 'string', length: 255 },
+    guildId: { type: 'string', length: 255 },
+    candidateCode: { type: 'string', length: 10 },
+    voteTime: { type: 'timestamp' },
+    isPublic: { type: 'boolean', initial: true }
+  }, {
+    primary: 'id',
+    autoInc: true
+  });
+
+  // 连任投票表
+  ctx.model.extend('ReelectionVote', {
+    id: { type: 'unsigned' },
+    adminUserId: { type: 'string', length: 255 },
+    guildId: { type: 'string', length: 255 },
+    voterId: { type: 'string', length: 255 },
+    isSupport: { type: 'boolean' },
+    voteTime: { type: 'timestamp' }
+  }, {
+    primary: 'id',
+    autoInc: true
+  });
+
+  // 选举表
+  ctx.model.extend('Election', {
+    id: { type: 'unsigned' },
+    electionId: { type: 'string', length: 255 },
+    guildId: { type: 'string', length: 255 },
+    electionType: { type: 'string', length: 50 },
+    status: { type: 'string', length: 50 },
+    startTime: { type: 'timestamp' },
+    candidateRegistrationEndTime: { type: 'timestamp' },
+    votingEndTime: { type: 'timestamp' },
+    results: { type: 'text' }
+  }, {
+    autoInc: true,
+    primary: 'id'
+  });
+
+  // 管理员表
+  ctx.model.extend('Administrator', {
+    id: { type: 'unsigned' },
+    userId: { type: 'string', length: 255 },
+    guildId: { type: 'string', length: 255 },
+    classNumber: { type: 'string', length: 10 },
+    appointmentTime: { type: 'timestamp' },
+    termEndTime: { type: 'timestamp' },
+    isActive: { type: 'boolean', initial: true },
+    reelectionVotes: { type: 'unsigned', initial: 0 },
+    totalVoters: { type: 'unsigned', initial: 0 }
+  }, {
+    autoInc: true,
+    primary: 'id'
   });
 }

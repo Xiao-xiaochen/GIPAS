@@ -23,6 +23,13 @@ import { ClearReset } from './ManualManagement/ClearRecord';
 // GIPAS定时管理模块
 import { TimedMute } from './AutomatedManagement/TimedMute';
 
+// GIPAS威权民主选举模块
+import { RegularPowerTransfer } from './AuthoritarianDemocracy/RegularPowerTransfer';
+import { CandidateManagement } from './AuthoritarianDemocracy/ElectionProcess/Candidate';
+import { VotingSystem } from './AuthoritarianDemocracy/ElectionProcess/Vote';
+import { ReelectionPoll } from './AuthoritarianDemocracy/ElectionProcess/Poll';
+import { ElectionManagement } from './AuthoritarianDemocracy/ElectionManagement';
+
 export const name = 'gipas'
 export const inject = { 
   required: [ 'cron', 'database' ] 
@@ -49,6 +56,14 @@ export function apply(ctx: Context, config: Config) {
 
   // GIPAS的定时管理功能
   TimedMute(ctx, config);
+
+  // GIPAS的威权民主选举功能
+  // 威权民主选举系统
+  RegularPowerTransfer(ctx, config);
+  CandidateManagement(ctx, config);
+  VotingSystem(ctx, config);
+  ReelectionPoll(ctx, config);
+  ElectionManagement(ctx, config);
 
   // GIPAS的自动化管理功能
   const initializationPromises: Promise<boolean>[] = [];

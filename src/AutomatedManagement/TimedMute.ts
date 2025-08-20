@@ -1,6 +1,7 @@
 import { Context } from 'koishi';
 import { Config } from '../config';
 import { SetGroupMute } from '../Utils/OnebotOperate';
+import { OneBotBot } from 'koishi-plugin-adapter-onebot';
 
 export function TimedMute(ctx: Context, config: Config) {
   const logger = ctx.logger('gipas:timed-mute');
@@ -110,10 +111,19 @@ export function TimedMute(ctx: Context, config: Config) {
         try {
           logger.info(`执行定时禁言: 群组 ${guildId} (${scheduleName})`);
           
+          // 获取可用的 OneBot 协议机器人
+          const onebotBot = ctx.bots.find(bot => bot.platform === 'onebot');
+          
+          if (!onebotBot) {
+            logger.error(`群组 ${guildId} 定时禁言失败: 未找到 OneBot 协议机器人 (${scheduleName})`);
+            return;
+          }
+          
           // 创建一个临时session用于执行禁言操作
           const session = {
             guildId: guildId,
-            bot: ctx.bots[0] // 使用第一个可用的bot
+            bot: onebotBot,
+            platform: 'onebot' // 设置平台为onebot
           };
           
           if (session.bot) {
@@ -135,10 +145,19 @@ export function TimedMute(ctx: Context, config: Config) {
         try {
           logger.info(`执行定时解禁: 群组 ${guildId} (${scheduleName})`);
           
+          // 获取可用的 OneBot 协议机器人
+          const onebotBot = ctx.bots.find(bot => bot.platform === 'onebot');
+          
+          if (!onebotBot) {
+            logger.error(`群组 ${guildId} 定时解禁失败: 未找到 OneBot 协议机器人 (${scheduleName})`);
+            return;
+          }
+          
           // 创建一个临时session用于执行解禁操作
           const session = {
             guildId: guildId,
-            bot: ctx.bots[0] // 使用第一个可用的bot
+            bot: onebotBot,
+            platform: 'onebot' // 设置平台为onebot
           };
           
           if (session.bot) {

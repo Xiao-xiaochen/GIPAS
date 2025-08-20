@@ -31,6 +31,14 @@ export interface Config {
       unmuteTime: string;
     };
   }>;
+
+  // 威权民主选举配置
+  electionEnabled: boolean;
+  electionCycle: 'weekly' | 'biweekly' | 'monthly';
+  candidateRegistrationHours: number;
+  votingHours: number;
+  reelectionThreshold: number; // 连任支持率阈值
+  maxAdministrators: number; // 最大管理员数量
 }
   
 export const Config:Schema<Config>=Schema.intersect([
@@ -125,6 +133,19 @@ export const Config:Schema<Config>=Schema.intersect([
         unmuteTime: Schema.string().description('解禁时间 (cron格式)').default('0 30 16 * * *')
       }).description('第二组定时设置')
     })).description('定时禁言群组配置').default([])
-  }).description('定时禁言设置')
+  }).description('定时禁言设置'),
+
+  Schema.object({
+    electionEnabled: Schema.boolean().description('启用威权民主选举系统').default(true),
+    electionCycle: Schema.union([
+      Schema.const('weekly').description('每周'),
+      Schema.const('biweekly').description('每两周'),
+      Schema.const('monthly').description('每月')
+    ]).description('选举周期').default('weekly'),
+    candidateRegistrationHours: Schema.number().description('候选人报名时长（小时）').default(24),
+    votingHours: Schema.number().description('投票时长（小时）').default(48),
+    reelectionThreshold: Schema.number().description('连任支持率阈值（百分比）').default(50),
+    maxAdministrators: Schema.number().description('最大管理员数量').default(8)
+  }).description('威权民主选举设置')
 
 ])

@@ -54,4 +54,63 @@ export interface FileSystem {
   supervisionRating: number; // 监督性评级，初始值100分，最高100分
   positivityRating: number; // 积极性评分，初始值100分，最高100分
   isPublic: boolean;
+
+}
+
+// 选举相关接口
+export interface ElectionCandidate {
+  id: number;
+  electionId: string;
+  userId: string;
+  guildId: string;
+  classNumber: string; // 班级编号
+  candidateCode: string; // 候选人编号 (如101, 201等)
+  applicationTime: Date;
+  isApproved: boolean;
+  manifesto?: string; // 竞选宣言
+}
+
+// 选举投票记录
+export interface ElectionVote {
+  id: number;
+  electionId: string;
+  voterId: string;
+  guildId: string;
+  candidateCode: string;
+  voteTime: Date;
+  isPublic: boolean;
+}
+
+// 连任投票记录
+export interface ReelectionVote {
+  id: number;
+  adminUserId: string;
+  guildId: string;
+  voterId: string;
+  isSupport: boolean;
+  voteTime: Date;
+}
+
+export interface Election {
+  id: number;
+  electionId: string;
+  guildId: string;
+  electionType: 'initial' | 'reelection'; // 初选或连任选举
+  status: 'preparation' | 'candidate_registration' | 'voting' | 'completed' | 'cancelled';
+  startTime: Date;
+  candidateRegistrationEndTime?: Date;
+  votingEndTime?: Date;
+  results?: string; // JSON格式存储选举结果
+}
+
+export interface Administrator {
+  id: number;
+  userId: string;
+  guildId: string;
+  classNumber: string;
+  appointmentTime: Date;
+  termEndTime?: Date;
+  isActive: boolean;
+  reelectionVotes?: number; // 连任投票数
+  totalVoters?: number; // 总投票人数
 }
