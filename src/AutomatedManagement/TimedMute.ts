@@ -59,9 +59,12 @@ export function TimedMute(ctx: Context, config: Config) {
   // 发送群消息
   async function sendGroupMessage(guildId: string, message: string) {
     try {
-      const bot = ctx.bots[0];
-      if (bot) {
-        await bot.sendMessage(guildId, message);
+      // 只使用OneBot协议的机器人发送消息，避免多个机器人同时发送
+      const onebotBot = ctx.bots.find(bot => bot.platform === 'onebot');
+      if (onebotBot) {
+        await onebotBot.sendMessage(guildId, message);
+      } else {
+        logger.warn(`发送群消息失败 (${guildId}): 未找到OneBot协议机器人`);
       }
     } catch (error) {
       logger.error(`发送群消息失败 (${guildId}):`, error);
