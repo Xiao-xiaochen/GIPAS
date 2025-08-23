@@ -3,6 +3,14 @@ import { Schema } from 'koishi';
 export interface Config {
   geminiModel: string;
   geminiApiKey: string;
+  
+  // Deepseek API 配置
+  deepseekApiKey: string;
+  deepseekModel: string;
+  deepseekBaseUrl: string;
+  
+  // API 使用策略
+  apiStrategy: 'gemini-only' | 'deepseek-only' | 'gemini-first' | 'deepseek-first';
 
   enabledGroups: string[]
   applicationTimeout: number
@@ -44,8 +52,19 @@ export interface Config {
 export const Config:Schema<Config>=Schema.intersect([
 
   Schema.object({
-    geminiModel: Schema.string().description('模型设置'),
-    geminiApiKey: Schema.string().description('API Key')
+    geminiModel: Schema.string().description('Gemini 模型设置').default('gemini-2.0-flash-exp'),
+    geminiApiKey: Schema.string().description('Gemini API Key').role('secret'),
+    
+    deepseekApiKey: Schema.string().description('Deepseek API Key (备用)').role('secret').default(''),
+    deepseekModel: Schema.string().description('Deepseek 模型').default('deepseek-chat'),
+    deepseekBaseUrl: Schema.string().description('Deepseek API 基础URL').default('https://api.deepseek.com/v1'),
+    
+    apiStrategy: Schema.union([
+      Schema.const('gemini-only').description('仅使用 Gemini'),
+      Schema.const('deepseek-only').description('仅使用 Deepseek'),
+      Schema.const('gemini-first').description('优先 Gemini，失败时切换到 Deepseek'),
+      Schema.const('deepseek-first').description('优先 Deepseek，失败时切换到 Gemini'),
+    ]).description('API 使用策略').default('gemini-first')
   }).description('AI基础设置'),
 
   Schema.object({

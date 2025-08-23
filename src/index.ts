@@ -32,6 +32,9 @@ import { ReelectionPoll } from './AuthoritarianDemocracy/ElectionProcess/Poll';
 import { ElectionManagement } from './AuthoritarianDemocracy/ElectionManagement';
 import { enhanceElectionDisplay } from './Utils/ElectionIdParser';
 import { addDataFixCommands } from './Utils/FixCandidateData';
+import { addAIServiceCommands } from './Utils/AIServiceCommands';
+import { addSystemStatusCommands } from './AutomatedManagement/GIPASInfo/SystemStatus';
+import { addQuickStatusCommands } from './AutomatedManagement/GIPASInfo/QuickStatus';
 
 export const name = 'gipas'
 export const inject = { 
@@ -70,6 +73,9 @@ export function apply(ctx: Context, config: Config) {
   ElectionManagement(ctx, config);
   enhanceElectionDisplay(ctx); // 人性化选举ID显示
   addDataFixCommands(ctx); // 候选人数据修复工具
+  addAIServiceCommands(ctx, config); // AI服务管理命令
+  addSystemStatusCommands(ctx, config); // GIPAS系统状态命令
+  addQuickStatusCommands(ctx, config); // GIPAS快速状态命令
 
   // GIPAS的自动化管理功能
   const initializationPromises: Promise<boolean>[] = [];
