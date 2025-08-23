@@ -40,7 +40,8 @@ export const inject = {
   required: [ 'cron', 'database' ] 
 }
 
-
+// 导出配置schema
+export { Config } from './config';
 
 // 只有 GuildMessageHistories 仍在此处声明，GuildChatSessions 将被移除或用于其他目的
 // 如果你希望保留 GuildChatSessions 这个 Map，但不再存储 Chat 实例，那么它在这里的声明就没有实际用途了，可以考虑移除
