@@ -148,20 +148,34 @@ export function VotingSystem(ctx: Context, config: Config) {
       }
 
       try {
-        // 获取当前选举
+        // 获取当前选举 - 优先显示进行中的投票
         const allElections = await ctx.database.get('Election', { guildId: session.guildId });
-        const ongoingElection = allElections.filter(e => e.status === 'voting' || e.status === 'completed');
+        
+        // 首先查找进行中的投票
+        let ongoingElection = allElections.filter(e => e.status === 'voting');
+        
+        // 如果没有进行中的投票，再查找已完成的选举
+        if (ongoingElection.length === 0) {
+          ongoingElection = allElections.filter(e => e.status === 'completed');
+        }
 
         if (ongoingElection.length === 0) {
           return '📊 当前没有可查看的选举统计';
         }
 
-        const election = ongoingElection[0];
-
-        // 获取所有投票
+        // 如果有多个相同状态的选举，选择最新的一个
+        const election = ongoingElection.sort((a, b) => 
+          new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+        )[0];
+        
+        logger.info(`查看投票统计 - 选举状态: ${election.status}, 选举ID: ${election.electionId}`);
+        
+        // 获取所有投票（使用新的查询确保获取最新数据）
         const votes = await ctx.database.get('ElectionVote', {
           electionId: election.electionId
         });
+        
+        logger.info(`获取到 ${votes.length} 条投票记录，选举ID: ${election.electionId}`);
 
         // 获取所有候选人
         const candidates = await ctx.database.get('ElectionCandidate', {
@@ -391,11 +405,14 @@ export function VotingSystem(ctx: Context, config: Config) {
 
   // 计算选举结果
   async function calculateElectionResults(electionId: string, guildId: string) {
+    // 获取最新的投票和候选人数据
     const votes = await ctx.database.get('ElectionVote', { electionId });
     const candidates = await ctx.database.get('ElectionCandidate', { 
       electionId, 
       isApproved: true 
     });
+    
+    logger.info(`计算选举结果: 获取到 ${votes.length} 条投票记录，${candidates.length} 名候选人`);
 
     // 按班级分组候选人
     const candidatesByClass = new Map<string, any[]>();
