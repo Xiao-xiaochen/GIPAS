@@ -97,7 +97,7 @@ export function FileSystem( ctx: Context , config: Config ) {
         SelfDescription: parsedData.SelfDescription,
         isPublic: parsedData.isPublic,
         supervisionRating: isFirstTime ? 100 : existingProfile[0]?.supervisionRating || 100, // 首次创建时初始化为100分，更新时保持原有评级
-        positivityRating: isFirstTime ? 100 : existingProfile[0]?.positivityRating || 100, // 积极性评分，初始值100分
+        positivityRating: isFirstTime ? 30 : existingProfile[0]?.positivityRating || 30, // 积极性评分，初始值30分
       }])
 
       // 清理状态

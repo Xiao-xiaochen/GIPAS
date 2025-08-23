@@ -4,8 +4,7 @@
 import { Context , Session } from 'koishi'
 import { } from "koishi-plugin-cron"; 
 import { Database } from './models';
-import { Config } from './config';
-export * from './config'
+import { Config as ConfigInterface, getAvailableGeminiModels } from './config';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -41,14 +40,32 @@ export const inject = {
   required: [ 'cron', 'database' ] 
 }
 
+
+
 // 只有 GuildMessageHistories 仍在此处声明，GuildChatSessions 将被移除或用于其他目的
 // 如果你希望保留 GuildChatSessions 这个 Map，但不再存储 Chat 实例，那么它在这里的声明就没有实际用途了，可以考虑移除
-// 如果你仍希望在 InitializeChatSession 中进行某种“初始化完成”的标记，可以考虑用 GuildInitializedStatus: Map<string, boolean> = new Map();
+// 如果你仍希望在 InitializeChatSession 中进行某种"初始化完成"的标记，可以考虑用 GuildInitializedStatus: Map<string, boolean> = new Map();
 // 为了简单起见，我将移除 GuildChatSessions 在这里的声明，因为它不再承载 Chat 实例。
 export const GuildMessageHistories: Map<string, { user: string; content: string; timestamp: Date }[]> = new Map();
 
-export function apply(ctx: Context, config: Config) {
+export function apply(ctx: Context, config: ConfigInterface) {
   ctx.logger('gipas').info('插件已加载');
+
+  // 在插件启动时获取可用的Gemini模型列表
+  if (config.geminiApiKey) {
+    getAvailableGeminiModels(config.geminiApiKey).then(models => {
+      ctx.logger('gipas').info(`🤖 获取到 ${models.length} 个可用的Gemini模型: ${models.join(', ')}`);
+      if (!models.includes(config.geminiModel)) {
+        ctx.logger('gipas').warn(`⚠️ 当前配置的模型 "${config.geminiModel}" 不在可用列表中，建议使用 "获取AI模型" 命令查看可用模型`);
+      } else {
+        ctx.logger('gipas').info(`✅ 当前模型 "${config.geminiModel}" 在可用列表中`);
+      }
+    }).catch(error => {
+      ctx.logger('gipas').warn('⚠️ 获取Gemini模型列表失败:', error.message);
+    });
+  } else {
+    ctx.logger('gipas').warn('⚠️ 未配置Gemini API Key，无法获取可用模型列表');
+  }
 
   // GIPAS核心逻辑
   Database(ctx);

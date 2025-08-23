@@ -72,8 +72,26 @@ export function CandidateManagement(ctx: Context, config: Config) {
 
         // 标准化班级格式 - 统一为纯数字
         let classNumber = profile.Class.replace(/[^\d]/g, ''); // 移除所有非数字字符
+        
+        // 处理中文数字转换
         if (!classNumber) {
-          return '❌ 档案中班级格式错误，请联系管理员更新档案';
+          // 尝试转换中文数字
+          const chineseNumbers = {
+            '一': '1', '二': '2', '三': '3', '四': '4', '五': '5',
+            '六': '6', '七': '7', '八': '8', '九': '9', '十': '10',
+            '零': '0'
+          };
+          
+          let convertedClass = profile.Class;
+          for (const [chinese, number] of Object.entries(chineseNumbers)) {
+            convertedClass = convertedClass.replace(new RegExp(chinese, 'g'), number);
+          }
+          
+          classNumber = convertedClass.replace(/[^\d]/g, '');
+        }
+        
+        if (!classNumber) {
+          return `❌ 档案中班级格式错误: "${profile.Class}"\n💡 班级应包含数字，如: "3班"、"三班"、"3"`;
         }
 
         // 生成候选人编号 - 格式：班级数字 + 两位序号 (如: 701, 702, 801, 802)

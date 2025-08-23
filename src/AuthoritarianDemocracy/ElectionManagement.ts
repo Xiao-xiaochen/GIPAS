@@ -278,7 +278,7 @@ export function ElectionManagement(ctx: Context, config: Config) {
         let cancelledCount = 0;
         for (const election of ongoingElections) {
           await ctx.database.set('Election', { id: election.id }, {
-            status: 'cancelled'
+            status: 'cancelled' as any
           });
           cancelledCount++;
         }
@@ -299,6 +299,119 @@ export function ElectionManagement(ctx: Context, config: Config) {
       } catch (error) {
         logger.error('强制结束选举失败:', error);
         return '❌ 强制结束选举失败';
+      }
+    });
+
+  // 修复选举状态命令
+  ctx.command('修复选举状态', { authority: 4 })
+    .action(async ({ session }) => {
+      if (!session?.guildId) {
+        return '请在群聊中使用此命令';
+      }
+
+      try {
+        const allElections = await ctx.database.get('Election', {
+          guildId: session.guildId
+        });
+
+        let fixedCount = 0;
+        const now = new Date();
+
+        for (const election of allElections) {
+          let shouldUpdate = false;
+          let newStatus = election.status;
+
+          // 检查是否应该自动结束
+          if (election.status === 'candidate_registration' || election.status === 'voting') {
+            // 如果投票截止时间已过，标记为已完成
+            if (election.votingEndTime && new Date(election.votingEndTime) < now) {
+              newStatus = 'completed';
+              shouldUpdate = true;
+            }
+            // 如果候选人报名截止时间已过但投票未开始，检查是否应该进入投票阶段
+            else if (election.candidateRegistrationEndTime && 
+                     new Date(election.candidateRegistrationEndTime) < now && 
+                     election.status === 'candidate_registration') {
+              // 检查是否有候选人
+              const candidates = await ctx.database.get('ElectionCandidate', {
+                electionId: election.electionId,
+                isApproved: true
+              });
+              
+              if (candidates.length > 0) {
+                newStatus = 'voting';
+                shouldUpdate = true;
+              } else {
+                newStatus = 'cancelled'; // 没有候选人，取消选举
+                shouldUpdate = true;
+              }
+            }
+          }
+
+          if (shouldUpdate) {
+        await ctx.database.set('Election', { id: election.id }, {
+          status: newStatus as any
+        });
+            fixedCount++;
+            logger.info(`修复选举 ${election.electionId} 状态: ${election.status} -> ${newStatus}`);
+          }
+        }
+
+        let message = `🔧 选举状态修复完成\n\n`;
+        if (fixedCount > 0) {
+          message += `✅ 修复了 ${fixedCount} 个选举的状态\n`;
+          message += `💡 请重新查看 "当前选举" 确认状态`;
+        } else {
+          message += `📊 所有选举状态正常，无需修复`;
+        }
+
+        return message;
+
+      } catch (error) {
+        logger.error('修复选举状态失败:', error);
+        return '❌ 修复选举状态失败';
+      }
+    });
+
+  // 手动设置选举状态命令
+  ctx.command('设置选举状态 <electionId:string> <status:string>', { authority: 4 })
+    .action(async ({ session }, electionId, status) => {
+      if (!session?.guildId) {
+        return '请在群聊中使用此命令';
+      }
+
+      if (!electionId || !status) {
+        return '❌ 请提供选举ID和状态\n💡 使用格式: 设置选举状态 <选举ID> <状态>\n📋 可用状态: preparation, candidate_registration, voting, completed, cancelled';
+      }
+
+      const validStatuses = ['preparation', 'candidate_registration', 'voting', 'completed', 'cancelled'];
+      if (!validStatuses.includes(status)) {
+        return `❌ 无效的状态: ${status}\n📋 可用状态: ${validStatuses.join(', ')}`;
+      }
+
+      try {
+        const elections = await ctx.database.get('Election', {
+          guildId: session.guildId,
+          electionId: electionId
+        });
+
+        if (elections.length === 0) {
+          return `❌ 未找到选举ID: ${electionId}`;
+        }
+
+        const election = elections[0];
+        const oldStatus = election.status;
+
+        await ctx.database.set('Election', { id: election.id }, {
+          status: status as any
+        });
+
+        logger.info(`手动设置选举 ${electionId} 状态: ${oldStatus} -> ${status}`);
+        return `✅ 已将选举状态从 "${getStatusText(oldStatus)}" 更改为 "${getStatusText(status)}"`;
+
+      } catch (error) {
+        logger.error('设置选举状态失败:', error);
+        return '❌ 设置选举状态失败';
       }
     });
 

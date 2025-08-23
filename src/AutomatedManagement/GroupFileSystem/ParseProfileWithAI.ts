@@ -1,8 +1,8 @@
 // src/AutomatedManagement/GroupFileSystem/ParseProfileWithAI.ts
 
 import { Context } from 'koishi';
-import { GoogleGenAI, Content, Part } from "@google/genai";
 import { Config } from '../../config';
+import { AIServiceManager } from '../../Utils/AIServiceManager';
 
 // Define a type for the parsed profile data. This is an example;
 // the actual structure would depend on what kind of profiles are being parsed.
@@ -28,10 +28,10 @@ export async function ParseProfileWithAI(
     }
 
     try {
-        const genAI = new GoogleGenAI({ apiKey: config.geminiApiKey });
+        // 使用AIServiceManager进行AI调用
+        const aiManager = new AIServiceManager(ctx, config);
 
         // System prompt to guide the AI in parsing profile data.
-        // It instructs the AI to extract specific fields and return them in JSON format.
         const systemPromptText = 
 `你是一个专业的个人资料解析器。你的任务是从提供的文本中提取个人资料信息，并将其格式化为JSON对象。
 请提取以下字段：
@@ -77,20 +77,24 @@ export async function ParseProfileWithAI(
 }
 `;
 
-        const requestContents: Content[] = [
-            { role: "user", parts: [{ text: systemPromptText }] },
-            { role: "user", parts: [{ text: profileData }] }
-        ];
-
-        ctx.logger('gipas').info(`正在使用 Gemini 解析个人资料: "${profileData.substring(0, 50)}..."`);
+        ctx.logger('gipas').info(`正在解析个人资料: "${profileData.substring(0, 50)}..."`);
         
-        const result = await genAI.models.generateContent({ 
-            model: config.geminiModel, 
-            contents: requestContents 
-        }); 
+        // 构建AI请求内容
+        const contents = [
+            { role: 'user' as const, parts: [{ text: systemPromptText }] },
+            { role: 'user' as const, parts: [{ text: `请解析以下个人资料：\n${profileData}` }] }
+        ];
+        
+        // 使用AIServiceManager调用AI服务
+        const aiResponse = await aiManager.generateContent(contents);
+        
+        if (!aiResponse.success) {
+            ctx.logger('gipas').error(`AI调用失败: ${aiResponse.error}`);
+            return DefaultResult;
+        }
 
-        const predictionText = result.text?.trim() ?? '';
-        ctx.logger('gipas').info(`Gemini 解析结果: "${predictionText}"`);
+        const predictionText = aiResponse.text;
+        ctx.logger('gipas').info(`AI解析结果 (${aiResponse.provider}): "${predictionText}"`);
 
         // Attempt to parse the AI's response as JSON
         try {
@@ -101,7 +105,19 @@ export async function ParseProfileWithAI(
                 jsonString = jsonMatch[1];
             }
 
-            const parsedResult: ParsedProfile = JSON.parse(jsonString);
+            const rawResult = JSON.parse(jsonString);
+            
+            // 标准化字段名，处理大小写不一致的问题
+            const parsedResult: ParsedProfile = {
+                realname: rawResult.realname || rawResult.Realname,
+                Term: rawResult.Term || rawResult.term,
+                Class: rawResult.Class || rawResult.class,
+                SelfDescription: rawResult.SelfDescription || rawResult.selfdescription || rawResult.selfDescription,
+                isPublic: rawResult.isPublic !== undefined ? rawResult.isPublic : 
+                         rawResult.ispublic !== undefined ? rawResult.ispublic :
+                         rawResult.IsPublic !== undefined ? rawResult.IsPublic : true
+            };
+            
             return parsedResult;
         } catch (jsonError) {
             ctx.logger('gipas').error('AI返回的不是有效的JSON格式:', jsonError);
@@ -112,10 +128,6 @@ export async function ParseProfileWithAI(
 
     } catch (error) {
         ctx.logger('gipas').error('AI个人资料解析时发生错误:', error);
-        if (error.response && error.response.status) {
-            ctx.logger('gipas').error(`Gemini API 错误状态码: ${error.response.status}`);
-            ctx.logger('gipas').error(`Gemini API 错误详情: ${JSON.stringify(error.response.data)}`);
-        }
         return DefaultResult;
     }
 }

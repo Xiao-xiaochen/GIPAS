@@ -89,6 +89,75 @@ export function addAIServiceCommands(ctx: Context, config: Config) {
       }
     });
 
+  // 获取可用模型列表命令
+  ctx.command('获取AI模型', { authority: 4 })
+    .action(async ({ session }) => {
+      if (!session) {
+        return '无效的会话';
+      }
+
+      try {
+        const aiService = new AIServiceManager(ctx, config);
+        
+        let message = `🤖 AI模型信息\n\n`;
+        message += `📋 当前使用模型: ${config.geminiModel}\n\n`;
+
+        // 获取可用的Gemini模型
+        message += `🔍 正在获取可用的Gemini模型...\n`;
+        const availableModels = await aiService.getAvailableGeminiModels();
+        
+        if (availableModels.length > 0) {
+          message += `\n✅ 发现 ${availableModels.length} 个可用模型:\n`;
+          for (const model of availableModels) {
+            const isCurrent = model === config.geminiModel;
+            message += `${isCurrent ? '🔸' : '•'} ${model}${isCurrent ? ' (当前)' : ''}\n`;
+          }
+          
+          message += `\n💡 使用 "测试模型 <模型名>" 来测试特定模型`;
+          message += `\n💡 在配置中修改 geminiModel 来切换模型`;
+        } else {
+          message += `\n❌ 无法获取模型列表，请检查API配置`;
+        }
+
+        return message;
+
+      } catch (error) {
+        logger.error('获取AI模型列表失败:', error);
+        return '❌ 获取AI模型列表失败，请查看日志';
+      }
+    });
+
+  // 测试特定模型命令
+  ctx.command('测试模型 <modelName:string>', { authority: 4 })
+    .action(async ({ session }, modelName) => {
+      if (!session || !modelName) {
+        return '请提供模型名称';
+      }
+
+      try {
+        const aiService = new AIServiceManager(ctx, config);
+        
+        let message = `🧪 测试模型: ${modelName}\n\n`;
+        message += `⏳ 正在测试模型可用性...\n`;
+
+        const isAvailable = await aiService.testModel(modelName);
+        
+        if (isAvailable) {
+          message += `✅ 模型 ${modelName} 可用\n`;
+          message += `💡 可以在配置中将 geminiModel 设置为 "${modelName}"`;
+        } else {
+          message += `❌ 模型 ${modelName} 不可用或测试失败\n`;
+          message += `💡 请检查模型名称是否正确，或使用 "获取AI模型" 查看可用模型`;
+        }
+
+        return message;
+
+      } catch (error) {
+        logger.error('测试AI模型失败:', error);
+        return '❌ 测试AI模型失败，请查看日志';
+      }
+    });
+
   logger.info('AI服务管理命令已加载');
 }
 

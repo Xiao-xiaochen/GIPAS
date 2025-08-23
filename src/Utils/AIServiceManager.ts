@@ -48,7 +48,7 @@ export class AIServiceManager {
         }
 
         return {
-          text: fullResponseText.toLowerCase().trim(),
+          text: fullResponseText.trim(),
           success: true,
           provider: 'gemini'
         };
@@ -59,7 +59,7 @@ export class AIServiceManager {
         });
 
         return {
-          text: result.text?.toLowerCase().trim() ?? '',
+          text: result.text?.trim() ?? '',
           success: true,
           provider: 'gemini'
         };
@@ -233,16 +233,90 @@ export class AIServiceManager {
   }
 
   /**
+   * 获取可用的Gemini模型列表
+   */
+  async getAvailableGeminiModels(): Promise<string[]> {
+    try {
+      if (!this.config.geminiApiKey) {
+        this.logger.warn('Gemini API Key 未配置，无法获取模型列表');
+        return [];
+      }
+
+      const genAI = new GoogleGenAI({ apiKey: this.config.geminiApiKey });
+      
+      // 尝试获取模型列表
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${this.config.geminiApiKey}`);
+      
+      if (!response.ok) {
+        this.logger.warn(`获取Gemini模型列表失败: ${response.status}`);
+        return this.getFallbackGeminiModels();
+      }
+
+      const data = await response.json();
+      const models = data.models
+        ?.filter((model: any) => model.name.includes('gemini'))
+        ?.map((model: any) => model.name.replace('models/', ''))
+        ?.sort() || [];
+
+      this.logger.info(`成功获取 ${models.length} 个Gemini模型`);
+      return models.length > 0 ? models : this.getFallbackGeminiModels();
+
+    } catch (error) {
+      this.logger.warn('获取Gemini模型列表时出错:', error.message);
+      return this.getFallbackGeminiModels();
+    }
+  }
+
+  /**
+   * 获取备用的Gemini模型列表
+   */
+  private getFallbackGeminiModels(): string[] {
+    return [
+      'gemini-2.0-flash-exp',
+      'gemini-1.5-flash',
+      'gemini-1.5-pro',
+      'gemini-1.0-pro'
+    ];
+  }
+
+  /**
+   * 测试模型是否可用
+   */
+  async testModel(modelName: string): Promise<boolean> {
+    try {
+      const originalModel = this.config.geminiModel;
+      this.config.geminiModel = modelName;
+
+      const testContents: Content[] = [{
+        role: 'user',
+        parts: [{ text: 'test' }]
+      }];
+
+      const result = await this.callGemini(testContents);
+      
+      // 恢复原始模型
+      this.config.geminiModel = originalModel;
+      
+      return result.success;
+    } catch (error) {
+      this.logger.debug(`模型 ${modelName} 测试失败:`, error.message);
+      return false;
+    }
+  }
+
+  /**
    * 检查API可用性
    */
   async checkAPIStatus(): Promise<{
     gemini: boolean;
     deepseek: boolean;
     errors: string[];
+    availableGeminiModels?: string[];
   }> {
     const errors: string[] = [];
     let geminiAvailable = false;
     let deepseekAvailable = false;
+    let availableGeminiModels: string[] = [];
 
     // 测试 Gemini
     if (this.config.geminiApiKey) {
@@ -255,6 +329,9 @@ export class AIServiceManager {
         geminiAvailable = result.success;
         if (!result.success) {
           errors.push(`Gemini: ${result.error}`);
+        } else {
+          // 如果Gemini可用，获取模型列表
+          availableGeminiModels = await this.getAvailableGeminiModels();
         }
       } catch (error) {
         errors.push(`Gemini: ${error.message}`);
@@ -285,7 +362,8 @@ export class AIServiceManager {
     return {
       gemini: geminiAvailable,
       deepseek: deepseekAvailable,
-      errors
+      errors,
+      availableGeminiModels
     };
   }
 }
