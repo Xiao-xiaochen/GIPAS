@@ -2,6 +2,11 @@
 import { Context } from 'koishi';
 import { Config } from '../config';
 
+
+
+// GIPAS的信息系统
+import { registerGIPASInfoCommands } from './GIPASInfo/index'
+
 // GIPAS的档案系统
 import { FileSystem } from './GroupFileSystem/ApplyFile';
 import { ZanSystem } from './GroupFileSystem/Zan';
@@ -20,6 +25,10 @@ export { InitializeChatSession, HandleMessage, FileSystem, ZanSystem, TimedMute,
 // 自动化管理系统统一入口
 export function AutomatedManagement(ctx: Context, config: Config) {
   const logger = ctx.logger('gipas:automated-management');
+
+  // GIPAS的信息和检查系统
+  logger.info('加载信息与检查系统功能...')
+  registerGIPASInfoCommands(ctx, config);
 
   // GIPAS的档案系统功能
   logger.info('加载档案系统功能...');

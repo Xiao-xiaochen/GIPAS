@@ -102,7 +102,10 @@ async function quickHealthCheck(ctx: Context, config: Config, guildId?: string) 
     
     const timedMuteConfig = config.timedMuteGroups.find(g => g.guildId === guildId);
     health.currentGuild.timedMute = timedMuteConfig ? 
-      (timedMuteConfig.schedule1.enabled || timedMuteConfig.schedule2.enabled) : false;
+      (timedMuteConfig.workdaySchedules.schedule1.enabled || 
+       timedMuteConfig.workdaySchedules.schedule2.enabled ||
+       timedMuteConfig.holidaySchedules.schedule1.enabled ||
+       timedMuteConfig.holidaySchedules.schedule2.enabled) : false;
   }
 
   return health;
