@@ -2,7 +2,7 @@ import { Context } from 'koishi';
 import { Config } from '../../config';
 import { addSystemStatusCommands } from './SystemStatus';
 import { addQuickStatusCommands } from './QuickStatus';
-import { addChartCommands } from './Chart/PieChart';
+import { addChartCommands } from './Chart/ChartCommands';
 
 export function registerGIPASInfoCommands(ctx: Context, config: Config) {
   // 注册系统状态命令
