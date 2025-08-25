@@ -19,11 +19,18 @@ export class ElectionIdParser {
     try {
       const parts = electionId.split('_');
       if (parts.length !== 3 || parts[0] !== 'election') {
+        console.log(`ElectionIdParser: 无效的选举ID格式: ${electionId}`);
         return null;
       }
 
       const groupId = parts[1];
       const timestamp = parseInt(parts[2]);
+      
+      if (isNaN(timestamp)) {
+        console.log(`ElectionIdParser: 无效的时间戳: ${parts[2]}`);
+        return null;
+      }
+
       const createTime = new Date(timestamp).toLocaleString('zh-CN', {
         year: 'numeric',
         month: '2-digit',
@@ -38,6 +45,8 @@ export class ElectionIdParser {
       // 生成可读格式
       const readable = `${createTime.split(' ')[0].replace(/\//g, '')}期第${shortId}号选举`;
 
+      console.log(`ElectionIdParser: 成功解析 ${electionId} -> ${readable}`);
+
       return {
         readable,
         groupId,
@@ -46,6 +55,7 @@ export class ElectionIdParser {
         shortId
       };
     } catch (error) {
+      console.log(`ElectionIdParser: 解析错误: ${error}`);
       return null;
     }
   }
@@ -88,11 +98,14 @@ export class ElectionIdParser {
   static getFriendlyName(electionId: string, electionType: 'initial' | 'reelection'): string {
     const parsed = this.parseElectionId(electionId);
     if (!parsed) {
-      return `${electionType === 'initial' ? '管理员选举' : '连任选举'} (${electionId.slice(-6)})`;
+      // 如果解析失败，尝试简单的后缀提取
+      const parts = electionId.split('_');
+      const shortId = parts.length >= 3 ? parts[2].slice(-6) : electionId.slice(-6);
+      return `${electionType === 'initial' ? '管理员选举' : '连任选举'} (${shortId}号)`;
     }
 
     const typeText = electionType === 'initial' ? '管理员选举' : '连任选举';
-    const date = parsed.createTime.split(' ')[0];
+    const date = parsed.createTime.split(' ')[0].replace(/\//g, '');
     return `${date} ${typeText} (${parsed.shortId}号)`;
   }
 }
@@ -122,6 +135,32 @@ export function enhanceElectionDisplay(ctx: Context) {
       message += `🔢 短编号: ${parsed.shortId}\n`;
       message += `⏰ 时间戳: ${parsed.timestamp}\n\n`;
       message += `💡 以后可以用 "${parsed.readable}" 来称呼这次选举`;
+
+      return message;
+    });
+
+  // 添加测试选举ID格式化命令
+  ctx.command('测试选举格式化')
+    .action(async ({ session }) => {
+      const testElectionId = 'election_1046788487_1756083600016';
+      const parsed = ElectionIdParser.parseElectionId(testElectionId);
+      const friendlyName = ElectionIdParser.getFriendlyName(testElectionId, 'initial');
+      const shortName = ElectionIdParser.getShortName(testElectionId);
+
+      let message = `🧪 选举ID格式化测试\n\n`;
+      message += `🔤 原始ID: ${testElectionId}\n`;
+      message += `📋 友好名称: ${friendlyName}\n`;
+      message += `🏷️ 简称: ${shortName}\n\n`;
+      
+      if (parsed) {
+        message += `✅ 解析成功:\n`;
+        message += `  • 群组ID: ${parsed.groupId}\n`;
+        message += `  • 时间戳: ${parsed.timestamp}\n`;
+        message += `  • 创建时间: ${parsed.createTime}\n`;
+        message += `  • 短ID: ${parsed.shortId}\n`;
+      } else {
+        message += `❌ 解析失败`;
+      }
 
       return message;
     });

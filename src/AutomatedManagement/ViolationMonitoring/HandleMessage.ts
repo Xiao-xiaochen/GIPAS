@@ -1,6 +1,6 @@
 import { Context , Session } from 'koishi'
-import { Config } from '../config'
-import { ExecutePunishment } from '../Utils/ExecutePunishment';
+import { Config } from '../../config'
+import { ExecutePunishment } from '../../Utils/ExecutePunishment';
 import { AnalyzeMessage } from './AnalyzeMessage';
 
 

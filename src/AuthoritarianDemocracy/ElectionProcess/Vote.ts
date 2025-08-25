@@ -5,35 +5,68 @@ import { setGroupAdmin, batchSetGroupAdmin } from '../../Utils/GroupAdminManagem
 export function VotingSystem(ctx: Context, config: Config) {
   const logger = ctx.logger('gipas:voting');
 
-  // 投票命令 - 群内公开投票
+  // 支持投票命令 - 群内公开投票
+  ctx.command('支持 <candidateCode:string>')
+    .action(async ({ session }, candidateCode) => {
+      if (!session?.guildId || !session?.userId) {
+        return '请在群聊中使用此命令';
+      }
+
+      return await processVote(session.guildId, session.userId, candidateCode, 'support', true);
+    });
+
+  // 反对投票命令 - 群内公开投票
+  ctx.command('反对 <candidateCode:string>')
+    .action(async ({ session }, candidateCode) => {
+      if (!session?.guildId || !session?.userId) {
+        return '请在群聊中使用此命令';
+      }
+
+      return await processVote(session.guildId, session.userId, candidateCode, 'oppose', true);
+    });
+
+  // 私密支持投票命令 - 私聊投票
+  ctx.command('私密支持 <candidateCode:string>')
+    .action(async ({ session }, candidateCode) => {
+      if (!session?.userId) {
+        return '请提供有效的用户信息';
+      }
+
+      const guildId = config.enabledGroups[0];
+      if (!guildId) {
+        return '❌ 未配置启用的群组';
+      }
+
+      return await processVote(guildId, session.userId, candidateCode, 'support', false);
+    });
+
+  // 私密反对投票命令 - 私聊投票
+  ctx.command('私密反对 <candidateCode:string>')
+    .action(async ({ session }, candidateCode) => {
+      if (!session?.userId) {
+        return '请提供有效的用户信息';
+      }
+
+      const guildId = config.enabledGroups[0];
+      if (!guildId) {
+        return '❌ 未配置启用的群组';
+      }
+
+      return await processVote(guildId, session.userId, candidateCode, 'oppose', false);
+    });
+
+  // 兼容旧的投票命令（默认为支持票）
   ctx.command('投票 <candidateCode:string>')
     .action(async ({ session }, candidateCode) => {
       if (!session?.guildId || !session?.userId) {
         return '请在群聊中使用此命令';
       }
 
-      return await processVote(session.guildId, session.userId, candidateCode, true);
-    });
-
-  // 私密投票命令 - 私聊投票
-  ctx.command('私密投票 <candidateCode:string>')
-    .action(async ({ session }, candidateCode) => {
-      if (!session?.userId) {
-        return '请提供有效的用户信息';
-      }
-
-      // 需要指定群组ID，这里可以通过其他方式获取或要求用户提供
-      // 暂时使用配置中的第一个启用群组
-      const guildId = config.enabledGroups[0];
-      if (!guildId) {
-        return '❌ 未配置启用的群组';
-      }
-
-      return await processVote(guildId, session.userId, candidateCode, false);
+      return await processVote(session.guildId, session.userId, candidateCode, 'support', true);
     });
 
   // 处理投票逻辑
-  async function processVote(guildId: string, voterId: string, candidateCode: string, isPublic: boolean): Promise<string> {
+  async function processVote(guildId: string, voterId: string, candidateCode: string, voteType: 'support' | 'oppose', isPublic: boolean): Promise<string> {
     try {
       if (!candidateCode) {
         return '❌ 请提供候选人编号\n💡 使用格式: 投票 101 (公开投票) 或 私密投票 101';
@@ -76,14 +109,30 @@ export function VotingSystem(ctx: Context, config: Config) {
         return '❌ 候选人不得参与投票';
       }
 
-      // 检查是否已经投过票
-      const existingVote = await ctx.database.get('ElectionVote', {
+      // 检查投票数量限制
+      const existingVotes = await ctx.database.get('ElectionVote', {
         electionId: election.electionId,
         voterId: voterId
       });
 
-      if (existingVote.length > 0) {
-        return '❌ 您已经投过票了\n💡 每人只能投一票';
+      const supportVotes = existingVotes.filter(v => v.voteType === 'support').length;
+      const opposeVotes = existingVotes.filter(v => v.voteType === 'oppose').length;
+
+      if (voteType === 'support' && supportVotes >= config.supportVotesPerPerson) {
+        return `❌ 您的支持票已用完 (${supportVotes}/${config.supportVotesPerPerson})\n💡 每人最多可投 ${config.supportVotesPerPerson} 张支持票`;
+      }
+
+      if (voteType === 'oppose' && opposeVotes >= config.opposeVotesPerPerson) {
+        return `❌ 您的反对票已用完 (${opposeVotes}/${config.opposeVotesPerPerson})\n💡 每人最多可投 ${config.opposeVotesPerPerson} 张反对票`;
+      }
+
+      // 检查是否已经对同一候选人投过同类型的票
+      const existingVoteForCandidate = existingVotes.find(v => 
+        v.candidateCode === candidateCode && v.voteType === voteType
+      );
+
+      if (existingVoteForCandidate) {
+        return `❌ 您已经对候选人 ${candidateCode} 投过${voteType === 'support' ? '支持' : '反对'}票了\n💡 同一候选人只能接受同一人的一张同类型票`;
       }
 
       // 检查投票者是否有档案
@@ -102,6 +151,7 @@ export function VotingSystem(ctx: Context, config: Config) {
         voterId: voterId,
         guildId: guildId,
         candidateCode: candidateCode,
+        voteType: voteType,
         voteTime: new Date(),
         isPublic: isPublic
       });
@@ -115,10 +165,22 @@ export function VotingSystem(ctx: Context, config: Config) {
       const candidateName = candidateProfile.length > 0 ? candidateProfile[0].realname : '未知';
       const candidateClass = candidate[0].classNumber;
 
-      let message = `✅ 投票成功！\n\n`;
-      message += `🗳️ 您投给了: ${candidateCode} - ${candidateName} (${candidateClass})\n`;
+      // 重新获取投票统计
+      const updatedVotes = await ctx.database.get('ElectionVote', {
+        electionId: election.electionId,
+        voterId: voterId
+      });
+      const updatedSupportVotes = updatedVotes.filter(v => v.voteType === 'support').length;
+      const updatedOpposeVotes = updatedVotes.filter(v => v.voteType === 'oppose').length;
+
+      const voteTypeText = voteType === 'support' ? '支持' : '反对';
+      let message = `✅ ${voteTypeText}投票成功！\n\n`;
+      message += `🗳️ 您${voteTypeText}了: ${candidateCode} - ${candidateName} (${candidateClass})\n`;
       message += `📊 投票方式: ${isPublic ? '公开投票' : '私密投票'}\n`;
       message += `⏰ 投票时间: ${new Date().toLocaleString('zh-CN')}\n\n`;
+      message += `📈 您的投票统计:\n`;
+      message += `  • 支持票: ${updatedSupportVotes}/${config.supportVotesPerPerson}\n`;
+      message += `  • 反对票: ${updatedOpposeVotes}/${config.opposeVotesPerPerson}\n\n`;
       message += `💡 投票已记录，无法修改`;
 
       // 如果是公开投票，在群内通知
@@ -126,12 +188,12 @@ export function VotingSystem(ctx: Context, config: Config) {
         const bot = ctx.bots.find(bot => bot.platform === 'onebot');
         if (bot) {
           const voterName = voterProfile[0].realname;
-          const publicMessage = `🗳️ ${voterName} 投票给了 ${candidateCode} - ${candidateName} (${candidateClass})`;
+          const publicMessage = `🗳️ ${voterName} ${voteTypeText}了 ${candidateCode} - ${candidateName} (${candidateClass})`;
           await bot.sendMessage(guildId, publicMessage);
         }
       }
 
-      logger.info(`用户 ${voterId} 投票给候选人 ${candidateCode} (${isPublic ? '公开' : '私密'})`);
+      logger.info(`用户 ${voterId} ${voteTypeText}投票给候选人 ${candidateCode} (${isPublic ? '公开' : '私密'})`);
       return message;
 
     } catch (error) {
@@ -139,6 +201,109 @@ export function VotingSystem(ctx: Context, config: Config) {
       return '❌ 投票失败，请稍后重试';
     }
   }
+
+  // 查看个人投票状态命令
+  ctx.command('我的投票')
+    .action(async ({ session }) => {
+      if (!session?.guildId || !session?.userId) {
+        return '请在群聊中使用此命令';
+      }
+
+      try {
+        // 获取当前选举
+        const allElections = await ctx.database.get('Election', { guildId: session.guildId });
+        const ongoingElection = allElections.filter(e => e.status === 'voting');
+
+        if (ongoingElection.length === 0) {
+          return '📊 当前没有进行中的投票';
+        }
+
+        const election = ongoingElection[0];
+
+        // 获取用户的投票记录
+        const userVotes = await ctx.database.get('ElectionVote', {
+          electionId: election.electionId,
+          voterId: session.userId
+        });
+
+        const supportVotes = userVotes.filter(v => v.voteType === 'support');
+        const opposeVotes = userVotes.filter(v => v.voteType === 'oppose');
+
+        let message = `📊 您的投票状态\n\n`;
+        message += `🗳️ 投票统计:\n`;
+        message += `  • 支持票: ${supportVotes.length}/${config.supportVotesPerPerson}\n`;
+        message += `  • 反对票: ${opposeVotes.length}/${config.opposeVotesPerPerson}\n\n`;
+
+        if (supportVotes.length > 0) {
+          message += `✅ 您支持的候选人:\n`;
+          for (const vote of supportVotes) {
+            // 获取候选人信息
+            const candidate = await ctx.database.get('ElectionCandidate', {
+              electionId: election.electionId,
+              candidateCode: vote.candidateCode
+            });
+            
+            if (candidate.length > 0) {
+              const profile = await ctx.database.get('FileSystem', {
+                userId: candidate[0].userId,
+                groupId: session.guildId
+              });
+              const candidateName = profile.length > 0 ? profile[0].realname : '未知';
+              message += `  • ${vote.candidateCode} - ${candidateName} (${candidate[0].classNumber}班)\n`;
+            }
+          }
+          message += '\n';
+        }
+
+        if (opposeVotes.length > 0) {
+          message += `❌ 您反对的候选人:\n`;
+          for (const vote of opposeVotes) {
+            // 获取候选人信息
+            const candidate = await ctx.database.get('ElectionCandidate', {
+              electionId: election.electionId,
+              candidateCode: vote.candidateCode
+            });
+            
+            if (candidate.length > 0) {
+              const profile = await ctx.database.get('FileSystem', {
+                userId: candidate[0].userId,
+                groupId: session.guildId
+              });
+              const candidateName = profile.length > 0 ? profile[0].realname : '未知';
+              message += `  • ${vote.candidateCode} - ${candidateName} (${candidate[0].classNumber}班)\n`;
+            }
+          }
+          message += '\n';
+        }
+
+        if (userVotes.length === 0) {
+          message += `💡 您还没有投票\n`;
+          message += `📋 使用 "候选人列表" 查看所有候选人\n`;
+          message += `🗳️ 使用 "支持/反对 编号" 进行投票`;
+        } else {
+          const remainingSupportVotes = config.supportVotesPerPerson - supportVotes.length;
+          const remainingOpposeVotes = config.opposeVotesPerPerson - opposeVotes.length;
+          
+          if (remainingSupportVotes > 0 || remainingOpposeVotes > 0) {
+            message += `💡 您还可以投:\n`;
+            if (remainingSupportVotes > 0) {
+              message += `  • ${remainingSupportVotes} 张支持票\n`;
+            }
+            if (remainingOpposeVotes > 0) {
+              message += `  • ${remainingOpposeVotes} 张反对票\n`;
+            }
+          } else {
+            message += `✅ 您的所有票数已用完`;
+          }
+        }
+
+        return message;
+
+      } catch (error) {
+        logger.error('查看个人投票状态失败:', error);
+        return '❌ 获取投票状态失败';
+      }
+    });
 
   // 查看投票统计命令
   ctx.command('投票统计')
@@ -184,28 +349,50 @@ export function VotingSystem(ctx: Context, config: Config) {
         });
 
         // 统计每个候选人的得票数
-        const voteCount = new Map<string, number>();
-        const publicVotes = new Map<string, string[]>(); // 存储公开投票的投票者姓名
+        const supportCount = new Map<string, number>();
+        const opposeCount = new Map<string, number>();
+        const publicSupportVotes = new Map<string, string[]>(); // 存储公开支持投票的投票者姓名
+        const publicOpposeVotes = new Map<string, string[]>(); // 存储公开反对投票的投票者姓名
 
         for (const candidate of candidates) {
-          voteCount.set(candidate.candidateCode, 0);
-          publicVotes.set(candidate.candidateCode, []);
+          supportCount.set(candidate.candidateCode, 0);
+          opposeCount.set(candidate.candidateCode, 0);
+          publicSupportVotes.set(candidate.candidateCode, []);
+          publicOpposeVotes.set(candidate.candidateCode, []);
         }
 
         for (const vote of votes) {
-          const currentCount = voteCount.get(vote.candidateCode) || 0;
-          voteCount.set(vote.candidateCode, currentCount + 1);
+          if (vote.voteType === 'support') {
+            const currentCount = supportCount.get(vote.candidateCode) || 0;
+            supportCount.set(vote.candidateCode, currentCount + 1);
 
-          // 如果是公开投票，记录投票者姓名
-          if (vote.isPublic) {
-            const voterProfile = await ctx.database.get('FileSystem', {
-              userId: vote.voterId,
-              groupId: session.guildId
-            });
-            if (voterProfile.length > 0) {
-              const voterNames = publicVotes.get(vote.candidateCode) || [];
-              voterNames.push(voterProfile[0].realname);
-              publicVotes.set(vote.candidateCode, voterNames);
+            // 如果是公开投票，记录投票者姓名
+            if (vote.isPublic) {
+              const voterProfile = await ctx.database.get('FileSystem', {
+                userId: vote.voterId,
+                groupId: session.guildId
+              });
+              if (voterProfile.length > 0) {
+                const voterNames = publicSupportVotes.get(vote.candidateCode) || [];
+                voterNames.push(voterProfile[0].realname);
+                publicSupportVotes.set(vote.candidateCode, voterNames);
+              }
+            }
+          } else if (vote.voteType === 'oppose') {
+            const currentCount = opposeCount.get(vote.candidateCode) || 0;
+            opposeCount.set(vote.candidateCode, currentCount + 1);
+
+            // 如果是公开投票，记录投票者姓名
+            if (vote.isPublic) {
+              const voterProfile = await ctx.database.get('FileSystem', {
+                userId: vote.voterId,
+                groupId: session.guildId
+              });
+              if (voterProfile.length > 0) {
+                const voterNames = publicOpposeVotes.get(vote.candidateCode) || [];
+                voterNames.push(voterProfile[0].realname);
+                publicOpposeVotes.set(vote.candidateCode, voterNames);
+              }
             }
           }
         }
@@ -225,14 +412,19 @@ export function VotingSystem(ctx: Context, config: Config) {
               statsByClass.set(classNum, []);
             }
 
-            const candidateVotes = voteCount.get(candidate.candidateCode) || 0;
-            const publicVoterNames = publicVotes.get(candidate.candidateCode) || [];
+            const candidateSupportVotes = supportCount.get(candidate.candidateCode) || 0;
+            const candidateOpposeVotes = opposeCount.get(candidate.candidateCode) || 0;
+            const publicSupportVoters = publicSupportVotes.get(candidate.candidateCode) || [];
+            const publicOpposeVoters = publicOpposeVotes.get(candidate.candidateCode) || [];
 
             statsByClass.get(classNum)!.push({
               code: candidate.candidateCode,
               name: profile[0].realname,
-              votes: candidateVotes,
-              publicVoters: publicVoterNames
+              supportVotes: candidateSupportVotes,
+              opposeVotes: candidateOpposeVotes,
+              netVotes: candidateSupportVotes - candidateOpposeVotes,
+              publicSupportVoters: publicSupportVoters,
+              publicOpposeVoters: publicOpposeVoters
             });
           }
         }
@@ -249,15 +441,22 @@ export function VotingSystem(ctx: Context, config: Config) {
           const classCandidates = statsByClass.get(classNum)!;
           message += `🏫 ${classNum}:\n`;
           
-          // 按得票数排序
-          classCandidates.sort((a, b) => b.votes - a.votes);
+          // 按净得票数排序
+          classCandidates.sort((a, b) => b.netVotes - a.netVotes);
           
           for (const candidate of classCandidates) {
-            message += `  🔢 ${candidate.code} - ${candidate.name}: ${candidate.votes}票`;
-            if (candidate.publicVoters.length > 0) {
-              message += ` (公开: ${candidate.publicVoters.join(', ')})`;
+            message += `  🔢 ${candidate.code} - ${candidate.name}:\n`;
+            message += `    ✅ 支持: ${candidate.supportVotes}票`;
+            if (candidate.publicSupportVoters.length > 0) {
+              message += ` (${candidate.publicSupportVoters.join(', ')})`;
             }
             message += '\n';
+            message += `    ❌ 反对: ${candidate.opposeVotes}票`;
+            if (candidate.publicOpposeVoters.length > 0) {
+              message += ` (${candidate.publicOpposeVoters.join(', ')})`;
+            }
+            message += '\n';
+            message += `    📊 净票数: ${candidate.netVotes}票\n`;
           }
           message += '\n';
         }
@@ -322,10 +521,14 @@ export function VotingSystem(ctx: Context, config: Config) {
           message += `📋 候选人数: ${candidates.length}人\n`;
           message += `⏰ 投票截止: ${election.votingEndTime ? new Date(election.votingEndTime).toLocaleString('zh-CN') : '未设置'}\n\n`;
           message += `💡 投票方式:\n`;
-          message += `• 群内公开投票: 投票 候选人编号\n`;
-          message += `• 私聊私密投票: 私密投票 候选人编号\n\n`;
+          message += `• 群内公开支持: 支持 候选人编号\n`;
+          message += `• 群内公开反对: 反对 候选人编号\n`;
+          message += `• 私聊私密支持: 私密支持 候选人编号\n`;
+          message += `• 私聊私密反对: 私密反对 候选人编号\n`;
+          message += `• 兼容旧命令: 投票 候选人编号 (等同于支持)\n\n`;
           message += `⚠️ 注意事项:\n`;
-          message += `• 每人只能投一票\n`;
+          message += `• 每人最多投 ${config.supportVotesPerPerson} 张支持票和 ${config.opposeVotesPerPerson} 张反对票\n`;
+          message += `• 同一候选人只能接受同一人的一张同类型票\n`;
           message += `• 候选人不得参与投票\n`;
           message += `• 需要填写档案才能投票\n\n`;
           message += `📋 使用 "候选人列表" 查看所有候选人`;
@@ -379,11 +582,14 @@ export function VotingSystem(ctx: Context, config: Config) {
           let message = `🎉 选举结果公布！\n\n`;
           
           for (const classResult of results.classwiseResults) {
-            message += `🏫 ${classResult.classNumber}:\n`;
+            message += `🏫 ${classResult.classNumber}班:\n`;
             if (classResult.winner) {
-              message += `  🏆 当选: ${classResult.winner.name} (${classResult.winner.code}) - ${classResult.winner.votes}票\n`;
+              message += `  🏆 当选: ${classResult.winner.name} (${classResult.winner.code})\n`;
+              message += `    ✅ 支持票: ${classResult.winner.supportVotes}\n`;
+              message += `    ❌ 反对票: ${classResult.winner.opposeVotes}\n`;
+              message += `    📊 净票数: ${classResult.winner.netVotes}\n`;
             } else {
-              message += `  ❌ 无人当选 (无候选人或得票为0)\n`;
+              message += `  ❌ 无人当选 (无候选人或净票数≤0)\n`;
             }
             message += '\n';
           }
@@ -440,7 +646,12 @@ export function VotingSystem(ctx: Context, config: Config) {
       for (const [classNum, classCandidates] of candidatesByClass) {
         const candidate = classCandidates.find(c => c.candidateCode === vote.candidateCode);
         if (candidate) {
-          candidate.votes++;
+          if (vote.voteType === 'support') {
+            candidate.supportVotes = (candidate.supportVotes || 0) + 1;
+          } else if (vote.voteType === 'oppose') {
+            candidate.opposeVotes = (candidate.opposeVotes || 0) + 1;
+          }
+          candidate.netVotes = (candidate.supportVotes || 0) - (candidate.opposeVotes || 0);
         }
       }
     }
@@ -448,12 +659,15 @@ export function VotingSystem(ctx: Context, config: Config) {
     // 确定每个班级的获胜者
     const classwiseResults = [];
     for (const [classNum, classCandidates] of candidatesByClass) {
-      classCandidates.sort((a, b) => b.votes - a.votes);
-      const winner = classCandidates.length > 0 && classCandidates[0].votes > 0 ? {
+      // 按净得票数排序
+      classCandidates.sort((a, b) => (b.netVotes || 0) - (a.netVotes || 0));
+      const winner = classCandidates.length > 0 && (classCandidates[0].netVotes || 0) > 0 ? {
         userId: classCandidates[0].userId,
         name: classCandidates[0].profile.realname,
         code: classCandidates[0].candidateCode,
-        votes: classCandidates[0].votes
+        supportVotes: classCandidates[0].supportVotes || 0,
+        opposeVotes: classCandidates[0].opposeVotes || 0,
+        netVotes: classCandidates[0].netVotes || 0
       } : null;
 
       classwiseResults.push({
@@ -462,7 +676,9 @@ export function VotingSystem(ctx: Context, config: Config) {
           userId: c.userId,
           name: c.profile.realname,
           code: c.candidateCode,
-          votes: c.votes
+          supportVotes: c.supportVotes || 0,
+          opposeVotes: c.opposeVotes || 0,
+          netVotes: c.netVotes || 0
         })),
         winner
       });

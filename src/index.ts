@@ -1,101 +1,56 @@
-// index.ts
+
+
 
 // 插件核心逻辑
 import { Context , Session } from 'koishi'
 import { } from "koishi-plugin-cron"; 
 import { Database } from './models';
-import { Config as ConfigInterface, getAvailableGeminiModels } from './config';
-import * as fs from 'fs';
-import * as path from 'path';
-
-// GIPAS自动化管理模块
-import { InitializeChatSession } from './AutomatedManagement/MonitorGroup'
-import { HandleMessage } from './AutomatedManagement/HandleMessage' // HandleMessage 将不再接收 chatSession 参数
-import { FileSystem } from './AutomatedManagement/GroupFileSystem/ApplyFile' // 引入文件系统模块
-import { ZanSystem } from './AutomatedManagement/GroupFileSystem/Zan' // 引入点赞系统模块
-
-// GIPAS手动管理模块
-import { SetTitle } from './ManualManagement/SetTitle'
-import { GeneralMute } from './ManualManagement/GeneralMute';
-import { ClearReset } from './ManualManagement/ClearRecord';
-
-// GIPAS定时管理模块
-import { TimedMute } from './AutomatedManagement/TimedMute';
-
-// GIPAS威权民主选举模块
-// GIPAS威权民主选举模块
-import { RegularPowerTransfer } from './AuthoritarianDemocracy/RegularPowerTransfer';
-import { CandidateManagement } from './AuthoritarianDemocracy/ElectionProcess/Candidate';
-import { VotingSystem } from './AuthoritarianDemocracy/ElectionProcess/Vote';
-import { ReelectionPoll } from './AuthoritarianDemocracy/ElectionProcess/Poll';
-import { ElectionManagement } from './AuthoritarianDemocracy/ElectionManagement';
-import { enhanceElectionDisplay } from './Utils/ElectionIdParser';
-import { addDataFixCommands } from './Utils/FixCandidateData';
-import { addAIServiceCommands } from './Utils/AIServiceCommands';
-import { addSystemStatusCommands } from './AutomatedManagement/GIPASInfo/SystemStatus';
-import { addQuickStatusCommands } from './AutomatedManagement/GIPASInfo/QuickStatus';
-
+import { Config as ConfigInterface } from './config';
 export const name = 'gipas'
 export const inject = { 
   required: [ 'cron', 'database' ] 
 }
-
-// 导出配置schema
 export { Config } from './config';
 
-// 只有 GuildMessageHistories 仍在此处声明，GuildChatSessions 将被移除或用于其他目的
-// 如果你希望保留 GuildChatSessions 这个 Map，但不再存储 Chat 实例，那么它在这里的声明就没有实际用途了，可以考虑移除
-// 如果你仍希望在 InitializeChatSession 中进行某种"初始化完成"的标记，可以考虑用 GuildInitializedStatus: Map<string, boolean> = new Map();
-// 为了简单起见，我将移除 GuildChatSessions 在这里的声明，因为它不再承载 Chat 实例。
+
+// GIPAS自动化管理模块
+import { AutomatedManagement, InitializeChatSession, HandleMessage } from './AutomatedManagement/index'
+
+
+// GIPAS手动管理模块
+import { ManualManagement } from './ManualManagement';
+
+// GIPAS威权民主选举模块
+import { AuthoritarianDemocracy } from './AuthoritarianDemocracy';
+
+// GIPAS测试模块
+import { TestSystem } from './Test';
+
+
+
 export const GuildMessageHistories: Map<string, { user: string; content: string; timestamp: Date }[]> = new Map();
 
 export function apply(ctx: Context, config: ConfigInterface) {
   ctx.logger('gipas').info('插件已加载');
 
-  // 在插件启动时获取可用的Gemini模型列表
-  if (config.geminiApiKey) {
-    getAvailableGeminiModels(config.geminiApiKey).then(models => {
-      ctx.logger('gipas').info(`🤖 获取到 ${models.length} 个可用的Gemini模型: ${models.join(', ')}`);
-      if (!models.includes(config.geminiModel)) {
-        ctx.logger('gipas').warn(`⚠️ 当前配置的模型 "${config.geminiModel}" 不在可用列表中，建议使用 "获取AI模型" 命令查看可用模型`);
-      } else {
-        ctx.logger('gipas').info(`✅ 当前模型 "${config.geminiModel}" 在可用列表中`);
-      }
-    }).catch(error => {
-      ctx.logger('gipas').warn('⚠️ 获取Gemini模型列表失败:', error.message);
-    });
-  } else {
-    ctx.logger('gipas').warn('⚠️ 未配置Gemini API Key，无法获取可用模型列表');
-  }
-
   // GIPAS核心逻辑
   Database(ctx);
-  FileSystem(ctx, config);
-  ZanSystem(ctx, config);
 
-  // GIPAS的人工操作功能
-  SetTitle(ctx);
-  ClearReset(ctx);
-  GeneralMute(ctx, config);
-
-  // GIPAS的定时管理功能
-  TimedMute(ctx, config);
-
-  // GIPAS的威权民主选举功能
-  // GIPAS的威权民主选举功能
-  // 威权民主选举系统
-  RegularPowerTransfer(ctx, config);
-  CandidateManagement(ctx, config);
-  VotingSystem(ctx, config);
-  ReelectionPoll(ctx, config);
-  ElectionManagement(ctx, config);
-  enhanceElectionDisplay(ctx); // 人性化选举ID显示
-  addDataFixCommands(ctx); // 候选人数据修复工具
-  addAIServiceCommands(ctx, config); // AI服务管理命令
-  addSystemStatusCommands(ctx, config); // GIPAS系统状态命令
-  addQuickStatusCommands(ctx, config); // GIPAS快速状态命令
+  // GIPAS的测试功能
+  TestSystem(ctx, config);
 
   // GIPAS的自动化管理功能
+  AutomatedManagement(ctx, config);
+
+  // GIPAS的手动管理功能
+  ManualManagement(ctx, config);
+
+  // GIPAS的威权民主选举功能
+  AuthoritarianDemocracy(ctx, config);
+
+
+
+  // GIPAS的监听功能
   const initializationPromises: Promise<boolean>[] = [];
   const GuildToInit = new Set(config.MonitoredGuildIds); 
   if (config.geminiApiKey) { // 这里虽然检查 API Key，但 InitializeChatSession 不再创建 Gemini 实例

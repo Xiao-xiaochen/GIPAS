@@ -1,9 +1,8 @@
 // MonitorGroup.ts
 
 import { Context } from 'koishi';
-import { Config } from '../config'; 
-// 导入 GuildMessageHistories，因为这里要管理它
-import { GuildMessageHistories } from '../index'; // 从 index.ts 导入，因为它在那里声明
+import { Config } from '../../config'; 
+import { GuildMessageHistories } from '../../index'; // 从 index.ts 导入，因为它在那里声明
 
 // 移除 GoogleGenAI 和 Content 的导入，因为这个文件不再直接与 Gemini API 交互
 

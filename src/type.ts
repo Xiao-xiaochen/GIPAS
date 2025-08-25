@@ -72,11 +72,12 @@ export interface ElectionCandidate {
 
 // 选举投票记录
 export interface ElectionVote {
-  id: number;
+  id?: number;
   electionId: string;
   voterId: string;
   guildId: string;
   candidateCode: string;
+  voteType: 'support' | 'oppose'; // 新增：投票类型
   voteTime: Date;
   isPublic: boolean;
 }

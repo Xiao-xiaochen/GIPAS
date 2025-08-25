@@ -1,6 +1,7 @@
 import { Context } from 'koishi';
 import { Config } from '../config';
 import { batchSetGroupAdmin } from '../Utils/GroupAdminManagement';
+import { ElectionIdParser } from '../Utils/ElectionIdParser';
 
 export function ElectionManagement(ctx: Context, config: Config) {
   const logger = ctx.logger('gipas:election-management');
@@ -190,7 +191,7 @@ export function ElectionManagement(ctx: Context, config: Config) {
           message += `  • 班级分布: `;
           const classDistribution = Array.from(adminsByClass.entries())
             .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
-            .map(([classNum, count]) => `${classNum}(${count}人)`)
+            .map(([classNum, count]) => `${classNum}班(${count}人)`)
             .join(', ');
           message += classDistribution + '\n';
         }
@@ -206,28 +207,42 @@ export function ElectionManagement(ctx: Context, config: Config) {
         if (ongoingElections.length > 0) {
           message += `  • 进行中选举: ${ongoingElections.length}次\n`;
           for (const election of ongoingElections) {
-            message += `    - ${election.electionId}: ${getStatusText(election.status)}\n`;
+            const friendlyName = ElectionIdParser.getFriendlyName(election.electionId, election.electionType || 'initial');
+            message += `    - ${friendlyName}: ${getStatusText(election.status)}\n`;
           }
         } else {
           message += `  • 进行中选举: 无\n`;
         }
 
-        // 候选人状态
+        // 候选人状态 - 修复显示错误
         message += `\n📋 候选人状态:\n`;
         message += `  • 历史候选人: ${candidates.length}人\n`;
         
-        const activeCandidates = candidates.filter(c => c.isApproved);
-        if (activeCandidates.length > 0) {
-          message += `  • 当前候选人: ${activeCandidates.length}人\n`;
+        // 获取当前进行中选举的候选人
+        const currentElectionCandidates = [];
+        if (ongoingElections.length > 0) {
+          for (const election of ongoingElections) {
+            const electionCandidates = await ctx.database.get('ElectionCandidate', {
+              electionId: election.electionId,
+              isApproved: true
+            });
+            currentElectionCandidates.push(...electionCandidates);
+          }
+        }
+        
+        if (currentElectionCandidates.length > 0) {
+          message += `  • 当前候选人: ${currentElectionCandidates.length}人\n`;
           const candidatesByClass = new Map();
-          for (const candidate of activeCandidates) {
+          for (const candidate of currentElectionCandidates) {
             candidatesByClass.set(candidate.classNumber, (candidatesByClass.get(candidate.classNumber) || 0) + 1);
           }
           const candidateDistribution = Array.from(candidatesByClass.entries())
             .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
-            .map(([classNum, count]) => `${classNum}(${count}人)`)
+            .map(([classNum, count]) => `${classNum}班(${count}人)`)
             .join(', ');
           message += `  • 班级分布: ${candidateDistribution}\n`;
+        } else {
+          message += `  • 当前候选人: 0人\n`;
         }
 
         // 投票状态
@@ -349,9 +364,9 @@ export function ElectionManagement(ctx: Context, config: Config) {
           }
 
           if (shouldUpdate) {
-        await ctx.database.set('Election', { id: election.id }, {
-          status: newStatus as any
-        });
+            await ctx.database.set('Election', { id: election.id }, {
+              status: newStatus as any
+            });
             fixedCount++;
             logger.info(`修复选举 ${election.electionId} 状态: ${election.status} -> ${newStatus}`);
           }
@@ -473,6 +488,99 @@ export function ElectionManagement(ctx: Context, config: Config) {
       } catch (error) {
         logger.error('清理选举数据失败:', error);
         return '❌ 清理选举数据失败';
+      }
+    });
+
+  // 调试选举数据命令
+  ctx.command('调试选举数据', { authority: 4 })
+    .action(async ({ session }) => {
+      if (!session?.guildId) {
+        return '请在群聊中使用此命令';
+      }
+
+      try {
+        const elections = await ctx.database.get('Election', {
+          guildId: session.guildId
+        });
+
+        const ongoingElections = elections.filter(e => 
+          e.status === 'preparation' || 
+          e.status === 'candidate_registration' || 
+          e.status === 'voting'
+        );
+
+        let message = `🔍 选举数据调试信息\n\n`;
+        message += `📊 总选举数: ${elections.length}\n`;
+        message += `🔄 进行中选举数: ${ongoingElections.length}\n\n`;
+
+        if (ongoingElections.length > 0) {
+          for (const election of ongoingElections) {
+            message += `🗳️ 选举详情:\n`;
+            message += `  • 原始ID: ${election.electionId}\n`;
+            message += `  • 选举类型: ${election.electionType || '未设置'}\n`;
+            message += `  • 状态: ${election.status}\n`;
+            
+            // 测试格式化
+            const friendlyName = ElectionIdParser.getFriendlyName(
+              election.electionId, 
+              election.electionType || 'initial'
+            );
+            const shortName = ElectionIdParser.getShortName(election.electionId);
+            
+            message += `  • 友好名称: ${friendlyName}\n`;
+            message += `  • 简称: ${shortName}\n`;
+            message += `  • 开始时间: ${election.startTime ? new Date(election.startTime).toLocaleString('zh-CN') : '未设置'}\n`;
+            message += '\n';
+          }
+        } else {
+          message += `💡 没有进行中的选举`;
+        }
+
+        return message;
+
+      } catch (error) {
+        logger.error('调试选举数据失败:', error);
+        return '❌ 调试选举数据失败';
+      }
+    });
+
+  // 修复选举数据命令
+  ctx.command('修复选举数据', { authority: 4 })
+    .action(async ({ session }) => {
+      if (!session?.guildId) {
+        return '请在群聊中使用此命令';
+      }
+
+      try {
+        const elections = await ctx.database.get('Election', {
+          guildId: session.guildId
+        });
+
+        let fixedCount = 0;
+        for (const election of elections) {
+          // 修复缺失的 electionType 字段
+          if (!election.electionType) {
+            await ctx.database.set('Election', { id: election.id }, {
+              electionType: 'initial' // 默认设置为初选
+            });
+            fixedCount++;
+            logger.info(`修复选举 ${election.electionId} 的 electionType 字段`);
+          }
+        }
+
+        let message = `🔧 选举数据修复完成\n\n`;
+        if (fixedCount > 0) {
+          message += `✅ 修复了 ${fixedCount} 个选举的 electionType 字段\n`;
+          message += `💡 请重新查看 "选举系统状态" 确认格式化效果`;
+        } else {
+          message += `📊 所有选举数据正常，无需修复`;
+        }
+
+        return message;
+
+      } catch (error) {
+        logger.error('修复选举数据失败:', error);
+        return '❌ 修复选举数据失败';
       }
     });
 

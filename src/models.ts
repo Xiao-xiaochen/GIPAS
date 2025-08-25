@@ -74,13 +74,13 @@ export function Database(ctx: Context) {
   });
 
   // 选举投票表
-  // 选举投票表
   ctx.model.extend('ElectionVote', {
     id: { type: 'unsigned' },
     electionId: { type: 'string', length: 255 },
     voterId: { type: 'string', length: 255 },
     guildId: { type: 'string', length: 255 },
     candidateCode: { type: 'string', length: 10 },
+    voteType: { type: 'string', length: 10 }, // 新增：投票类型 'support' 或 'oppose'
     voteTime: { type: 'timestamp' },
     isPublic: { type: 'boolean', initial: true }
   }, {
