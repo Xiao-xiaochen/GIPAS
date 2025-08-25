@@ -1,5 +1,5 @@
 import { Context } from 'koishi';
-import { Config } from '../config';
+import { Config } from '../../config';
 import { AIServiceManager } from './AIServiceManager';
 
 export function addAIServiceCommands(ctx: Context, config: Config) {

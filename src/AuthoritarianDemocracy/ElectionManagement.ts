@@ -1,7 +1,7 @@
 import { Context } from 'koishi';
 import { Config } from '../config';
-import { batchSetGroupAdmin } from '../Utils/GroupAdminManagement';
-import { ElectionIdParser } from '../Utils/ElectionIdParser';
+import { batchSetGroupAdmin } from '../Utils/Group/GroupAdminManagement';
+import { ElectionIdParser } from '../Utils/Election/ElectionIdParser';
 
 export function ElectionManagement(ctx: Context, config: Config) {
   const logger = ctx.logger('gipas:election-management');

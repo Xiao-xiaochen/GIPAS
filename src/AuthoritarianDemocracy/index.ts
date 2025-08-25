@@ -5,9 +5,9 @@ import { RegularPowerTransfer } from './RegularPowerTransfer';
 import { CandidateManagement } from './ElectionProcess/Candidate';
 import { VotingSystem } from './ElectionProcess/Vote';
 import { ReelectionPoll } from './ElectionProcess/Poll';
-import { enhanceElectionDisplay } from '../Utils/ElectionIdParser';
-import { addDataFixCommands } from '../Utils/FixCandidateData';
-import { addAIServiceCommands } from '../Utils/AIServiceCommands';
+import { enhanceElectionDisplay } from '../Utils/Election/ElectionIdParser';
+import { addDataFixCommands } from '../Utils/Election/FixCandidateData';
+import { addAIServiceCommands } from '../Utils/AI/AIServiceCommands';
 import { addSystemStatusCommands } from '../AutomatedManagement/GIPASInfo/SystemStatus';
 import { addQuickStatusCommands } from '../AutomatedManagement/GIPASInfo/QuickStatus';
 

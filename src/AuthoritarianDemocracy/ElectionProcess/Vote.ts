@@ -1,6 +1,6 @@
 import { Context } from 'koishi';
 import { Config } from '../../config';
-import { setGroupAdmin, batchSetGroupAdmin } from '../../Utils/GroupAdminManagement';
+import { setGroupAdmin, batchSetGroupAdmin } from '../../Utils/Group/GroupAdminManagement';
 
 export function VotingSystem(ctx: Context, config: Config) {
   const logger = ctx.logger('gipas:voting');

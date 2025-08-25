@@ -1,7 +1,7 @@
 import { Context } from 'koishi';
 import { Config } from '../../config';
-import { SetGroupMute } from '../../Utils/OnebotOperate';
-import { HolidayService } from '../../Utils/HolidayService';
+import { SetGroupMute } from '../../Utils/Onebot/OnebotOperate';
+import { HolidayService } from '../../Utils/System/HolidayService';
 
 export function TimedMute(ctx: Context, config: Config) {
   const logger = ctx.logger('gipas:timed-mute');

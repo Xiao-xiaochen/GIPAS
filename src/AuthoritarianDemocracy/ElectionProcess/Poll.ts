@@ -1,6 +1,6 @@
 import { Context } from 'koishi';
 import { Config } from '../../config';
-import { setGroupAdmin } from '../../Utils/GroupAdminManagement';
+import { setGroupAdmin } from '../../Utils/Group/GroupAdminManagement';
 
 export function ReelectionPoll(ctx: Context, config: Config) {
   const logger = ctx.logger('gipas:reelection-poll');

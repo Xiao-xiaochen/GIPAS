@@ -1,6 +1,6 @@
 import { Context } from 'koishi';
 import { Config } from '../config';
-import { SetGroupMute } from '../Utils/OnebotOperate';
+import { SetGroupMute } from '../Utils/OneBot/OnebotOperate';
 
 export function GeneralMute(ctx: Context, config: Config ) {
   ctx.command('戒严', { authority: 3 })

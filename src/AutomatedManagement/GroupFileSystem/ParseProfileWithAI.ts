@@ -2,7 +2,7 @@
 
 import { Context } from 'koishi';
 import { Config } from '../../config';
-import { AIServiceManager } from '../../Utils/AIServiceManager';
+import { AIServiceManager } from '../../Utils/AI/AIServiceManager';
 
 // Define a type for the parsed profile data. This is an example;
 // the actual structure would depend on what kind of profiles are being parsed.

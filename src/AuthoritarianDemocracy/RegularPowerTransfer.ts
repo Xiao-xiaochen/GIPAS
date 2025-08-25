@@ -1,6 +1,6 @@
 import { Context } from 'koishi';
 import { Config } from '../config';
-import { ElectionIdParser } from '../Utils/ElectionIdParser';
+import { ElectionIdParser } from '../Utils/Election/ElectionIdParser';
 
 export function RegularPowerTransfer(ctx: Context, config: Config) {
   const logger = ctx.logger('gipas:power-transfer');

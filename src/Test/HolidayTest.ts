@@ -1,6 +1,6 @@
 import { Context } from 'koishi';
 import { Config } from '../config';
-import { HolidayService } from '../Utils/HolidayService';
+import { HolidayService } from '../Utils/System/HolidayService';
 
 export function HolidayTest(ctx: Context, config: Config) {
   const logger = ctx.logger('holiday-test');

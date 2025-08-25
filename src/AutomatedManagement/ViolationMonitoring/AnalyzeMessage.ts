@@ -4,9 +4,9 @@ import { Context , Session } from 'koishi';
 import { Content } from "@google/genai"; 
 import { Config } from '../../config';
 import { ViolationAnalysisResult } from '../../type';
-import { getSessionImageUrl, downloadImageAsBase64 } from '../../Utils/DownloadImage';
-import { ParseAIResponse } from '../../Utils/ParseAIResponse';
-import { AIServiceManager } from '../../Utils/AIServiceManager';
+import { getSessionImageUrl, downloadImageAsBase64 } from '../../Utils/System/DownloadImage';
+import { ParseAIResponse } from '../../Utils/System/ParseAIResponse';
+import { AIServiceManager } from '../../Utils/AI/AIServiceManager';
 
 export async function AnalyzeMessage (
     session: Session,

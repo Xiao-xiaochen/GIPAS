@@ -1,6 +1,6 @@
 import { Context } from 'koishi';
 import { Config } from '../../config';
-import { AIServiceManager } from '../../Utils/AIServiceManager';
+import { AIServiceManager } from '../../Utils/AI/AIServiceManager';
 
 export function addSystemStatusCommands(ctx: Context, config: Config) {
   const logger = ctx.logger('gipas:system-status');
@@ -107,10 +107,16 @@ async function getSystemStatus(ctx: Context, config: Config, guildId?: string) {
   if (guildId) {
     const timedMuteConfig = config.timedMuteGroups.find(g => g.guildId === guildId);
     if (timedMuteConfig) {
-      status.modules.timedMute = timedMuteConfig.schedule1.enabled || timedMuteConfig.schedule2.enabled;
+      status.modules.timedMute = 
+        timedMuteConfig.workdaySchedules.schedule1.enabled || 
+        timedMuteConfig.workdaySchedules.schedule2.enabled ||
+        timedMuteConfig.holidaySchedules.schedule1.enabled ||
+        timedMuteConfig.holidaySchedules.schedule2.enabled;
       status.scheduledTasks.timedMute = 
-        (timedMuteConfig.schedule1.enabled ? 1 : 0) + 
-        (timedMuteConfig.schedule2.enabled ? 1 : 0);
+        (timedMuteConfig.workdaySchedules.schedule1.enabled ? 1 : 0) + 
+        (timedMuteConfig.workdaySchedules.schedule2.enabled ? 1 : 0) +
+        (timedMuteConfig.holidaySchedules.schedule1.enabled ? 1 : 0) +
+        (timedMuteConfig.holidaySchedules.schedule2.enabled ? 1 : 0);
     }
   }
 
