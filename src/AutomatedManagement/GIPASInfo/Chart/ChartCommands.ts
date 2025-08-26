@@ -38,6 +38,62 @@ export function addChartCommands(ctx: Context, config: Config) {
       }
     });
 
+  // 完整档案填写情况统计命令
+  ctx.command('完整档案统计', { authority: 2 })
+    .action(async ({ session }) => {
+      if (!session) {
+        return '无效的会话';
+      }
+
+      try {
+        const guildId = session.guildId;
+        if (!guildId) {
+          return '此命令只能在群聊中使用';
+        }
+
+        if (!config.enabledGroups.includes(guildId)) {
+          return '此群未启用档案系统';
+        }
+
+        await session.send('📊 正在生成完整档案填写情况统计图...');
+        
+        const chartPath = await chartGenerator.generateCompleteProfileChart(guildId);
+        
+        return segment.image(`file://${chartPath}`);
+      } catch (error) {
+        logger.error('生成完整档案统计图失败:', error);
+        return '❌ 生成统计图失败: ' + error.message;
+      }
+    });
+
+  // 完整档案班级分布统计命令
+  ctx.command('完整档案班级统计', { authority: 2 })
+    .action(async ({ session }) => {
+      if (!session) {
+        return '无效的会话';
+      }
+
+      try {
+        const guildId = session.guildId;
+        if (!guildId) {
+          return '此命令只能在群聊中使用';
+        }
+
+        if (!config.enabledGroups.includes(guildId)) {
+          return '此群未启用档案系统';
+        }
+
+        await session.send('📈 正在生成完整档案用户的班级分布统计图...');
+        
+        const chartPath = await chartGenerator.generateCompleteProfileClassChart(guildId);
+        
+        return segment.image(`file://${chartPath}`);
+      } catch (error) {
+        logger.error('生成完整档案班级分布统计图失败:', error);
+        return '❌ 生成统计图失败: ' + error.message;
+      }
+    });
+
   // 届数分布统计命令
   ctx.command('届数统计', { authority: 2 })
     .action(async ({ session }) => {

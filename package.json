@@ -32,10 +32,14 @@
   "keywords": [
     "bot"
   ],
-  "dependencies": {
-    "@google/genai": "^1.9.0"
-  },
   "peerDependencies": {
     "koishi": "^4.18.8"
+  },
+  "dependencies": {
+    "@google/genai": "^1.9.0",
+    "@napi-rs/canvas": "^0.1.77",
+    "canvg": "^4.0.3",
+    "echarts": "^6.0.0",
+    "jsdom": "^26.1.0"
   }
 }

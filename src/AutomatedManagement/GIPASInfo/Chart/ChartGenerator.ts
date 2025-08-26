@@ -66,6 +66,95 @@ export class ChartGenerator {
   }
 
   /**
+   * 生成完整档案填写情况饼图
+   * 完整档案定义：填写了真实姓名、届数、班级的档案
+   */
+  async generateCompleteProfileChart(guildId: string): Promise<string> {
+    try {
+      const members = await this.getGroupMembers(guildId);
+      if (!members || members.length === 0) {
+        throw new Error('无法获取群成员列表');
+      }
+
+      const profiles = await this.ctx.database.get('FileSystem', { groupId: guildId });
+      
+      // 检查档案是否完整（填写了真实姓名、届数、班级）
+      const completeProfiles = profiles.filter(p => 
+        p.realname && p.realname !== '未填写' && 
+        p.Term && p.Term !== '未填写' && 
+        p.Class && p.Class !== '未填写'
+      );
+      
+      const completeCount = completeProfiles.length;
+      const incompleteCount = profiles.length - completeCount;
+      const noProfileCount = members.length - profiles.length;
+
+      return await this.chartRenderer.createModernPieChart(
+        '群完整档案填写情况统计',
+        [
+          { name: '完整档案', value: completeCount },
+          { name: '不完整档案', value: incompleteCount },
+          { name: '未填写档案', value: noProfileCount }
+        ],
+        this.themeManager.getCurrentTheme()
+      );
+    } catch (error) {
+      this.logger.error('生成完整档案填写情况饼图失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 生成完整档案用户的班级分布饼图
+   */
+  async generateCompleteProfileClassChart(guildId: string): Promise<string> {
+    try {
+      const profiles = await this.ctx.database.get('FileSystem', { groupId: guildId });
+      if (!profiles || profiles.length === 0) {
+        throw new Error('未找到任何档案数据');
+      }
+
+      // 筛选完整档案
+      const completeProfiles = profiles.filter(p => 
+        p.realname && p.realname !== '未填写' && 
+        p.Term && p.Term !== '未填写' && 
+        p.Class && p.Class !== '未填写'
+      );
+      
+      if (completeProfiles.length === 0) {
+        throw new Error('未找到任何完整档案');
+      }
+
+      // 使用数据标准化器处理数据
+      const classStats = new Map<string, number>();
+      
+      completeProfiles.forEach(profile => {
+        const normalizedClass = this.dataNormalizer.normalizeClassFormat(profile.Class);
+        if (normalizedClass) {
+          classStats.set(normalizedClass, (classStats.get(normalizedClass) || 0) + 1);
+        }
+      });
+
+      if (classStats.size === 0) {
+        throw new Error('未找到有效的班级信息');
+      }
+
+      const chartData = Array.from(classStats.entries())
+        .map(([className, count]) => ({ name: className, value: count }))
+        .sort((a, b) => b.value - a.value);
+
+      return await this.chartRenderer.createModernPieChart(
+        '完整档案用户班级分布统计',
+        chartData,
+        this.themeManager.getCurrentTheme()
+      );
+    } catch (error) {
+      this.logger.error('生成完整档案班级分布饼图失败:', error);
+      throw error;
+    }
+  }
+
+  /**
    * 生成群内届数分布饼图
    */
   async generateTermDistributionChart(guildId: string): Promise<string> {
