@@ -115,3 +115,20 @@ export interface Administrator {
   reelectionVotes?: number; // 连任投票数
   totalVoters?: number; // 总投票人数
 }
+
+// 弹劾记录接口
+export interface ImpeachmentRecord {
+  id: number;
+  adminUserId: string;
+  guildId: string;
+  initiatorId: string;
+  initiateTime: Date;
+  endTime?: Date;
+  status: 'ongoing' | 'success' | 'failed' | 'cancelled';
+  supportVotes: number;
+  opposeVotes: number;
+  totalVotes: number;
+  requiredVotes?: number;
+  reason?: string;
+  result?: string;
+}

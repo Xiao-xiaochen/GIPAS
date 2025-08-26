@@ -1,5 +1,5 @@
 import { Context } from 'koishi';
-import { UserRecord, ViolationRecord, FileSystem, ElectionCandidate, ElectionVote, Election, Administrator, ReelectionVote } from './type';
+import { UserRecord, ViolationRecord, FileSystem, ElectionCandidate, ElectionVote, Election, Administrator, ReelectionVote, ImpeachmentRecord } from './type';
 
 
 
@@ -13,6 +13,7 @@ declare module 'koishi' {
     Election: Election;
     Administrator: Administrator;
     ReelectionVote: ReelectionVote;
+    ImpeachmentRecord: ImpeachmentRecord;
   }
 }
 
@@ -128,6 +129,25 @@ export function Database(ctx: Context) {
     isActive: { type: 'boolean', initial: true },
     reelectionVotes: { type: 'unsigned', initial: 0 },
     totalVoters: { type: 'unsigned', initial: 0 }
+  }, {
+    autoInc: true,
+    primary: 'id'
+  });
+
+  // 弹劾记录表
+  ctx.model.extend('ImpeachmentRecord', {
+    id: { type: 'unsigned' },
+    adminUserId: { type: 'string', length: 255 },
+    guildId: { type: 'string', length: 255 },
+    initiatorId: { type: 'string', length: 255 },
+    initiateTime: { type: 'timestamp' },
+    endTime: { type: 'timestamp' },
+    status: { type: 'string', length: 50 }, // 'ongoing', 'success', 'failed', 'cancelled'
+    supportVotes: { type: 'unsigned', initial: 0 },
+    opposeVotes: { type: 'unsigned', initial: 0 },
+    totalVotes: { type: 'unsigned', initial: 0 },
+    reason: { type: 'text' },
+    result: { type: 'text' }
   }, {
     autoInc: true,
     primary: 'id'

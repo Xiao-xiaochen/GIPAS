@@ -69,54 +69,136 @@ export function FileSystem( ctx: Context , config: Config ) {
 
   // 中间件，用于捕获用户的档案提交
   ctx.middleware(async (session, next) => {
-    const { userId, content } = session
-    if (!applicationStates.has(userId)) {
-      return next()
+    const { userId, content, guildId } = session
+    
+    // 如果用户在申请状态，处理档案提交
+    if (applicationStates.has(userId)) {
+      const state = applicationStates.get(userId)
+      logger.info(`User ${userId} is in application state, processing profile submission for guild ${state.guildId}`)
+
+      try {
+        // 智能解析与验证
+        logger.info(`Attempting to parse profile for user ${userId}: "${content.substring(0, 100)}..."`)
+        const parsedData = await parseProfile(ctx, config, content)
+        logger.info(`Profile parsed successfully for user ${userId}: ${JSON.stringify(parsedData)}`)
+
+        // 检查是否为首次创建档案
+        const existingProfile = await ctx.database.get('FileSystem', { 
+          userId,
+          groupId: state.guildId 
+        })
+        const isFirstTime = !existingProfile || existingProfile.length === 0
+        logger.info(`User ${userId} profile check: isFirstTime=${isFirstTime}, existing records=${existingProfile.length}`)
+
+        // 验证通过，存入数据库
+        const profileData = {
+          userId,
+          groupId: state.guildId,
+          realname: parsedData.realname,
+          Term: parsedData.Term,
+          Class: parsedData.Class,
+          SelfDescription: parsedData.SelfDescription,
+          isPublic: parsedData.isPublic,
+          supervisionRating: isFirstTime ? 100 : existingProfile[0]?.supervisionRating || 100,
+          positivityRating: isFirstTime ? 30 : existingProfile[0]?.positivityRating || 30,
+        }
+        
+        logger.info(`Saving profile data for user ${userId}: ${JSON.stringify(profileData)}`)
+        await ctx.database.upsert('FileSystem', [profileData])
+        logger.info(`Profile saved successfully for user ${userId}`)
+
+        // 清理状态
+        clearTimeout(state.timer)
+        applicationStates.delete(userId)
+
+        logger.info(`User ${userId} successfully submitted their profile.`)
+        // 根据会话类型决定是否使用@
+        const prefix = guildId ? h.at(userId) + ' ' : ''
+        return prefix + '你的档案已成功保存！'
+      } catch (error) {
+        logger.error(`Profile submission failed for user ${userId}:`, error)
+        // 格式错误，提示用户
+        const prefix = guildId ? h.at(userId) + ' ' : ''
+        return prefix + `档案格式似乎有误：${error.message}\n请检查后重新提交，无需重新申请。`
+      }
     }
 
-    const state = applicationStates.get(userId)
-
-    try {
-      // 智能解析与验证
-      const parsedData = await parseProfile(ctx, config, content)
-
-      // 检查是否为首次创建档案
-      const existingProfile = await ctx.database.get('FileSystem', { 
-        userId,
-        groupId: state.guildId 
-      })
-      const isFirstTime = !existingProfile || existingProfile.length === 0
-
-      // 验证通过，存入数据库
-      await ctx.database.upsert( 'FileSystem', [{
-        userId,
-        groupId: state.guildId,
-        realname: parsedData.realname,
-        Term: parsedData.Term,
-        Class: parsedData.Class,
-        SelfDescription: parsedData.SelfDescription,
-        isPublic: parsedData.isPublic,
-        supervisionRating: isFirstTime ? 100 : existingProfile[0]?.supervisionRating || 100, // 首次创建时初始化为100分，更新时保持原有评级
-        positivityRating: isFirstTime ? 30 : existingProfile[0]?.positivityRating || 30, // 积极性评分，初始值30分
-      }])
-
-      // 清理状态
-      clearTimeout(state.timer)
-      applicationStates.delete(userId)
-
-      logger.info(`User ${userId} successfully submitted their profile.`)
-      return h.at(userId) + ' 你的档案已成功保存！'
-    } catch (error) {
-      // 格式错误，提示用户
-      return h.at(userId) + ` 档案格式似乎有误：${error.message}\n请检查后重新提交，无需重新申请。`
+    // 如果用户不在申请状态，但发送了疑似档案格式的消息，进行检测和提示
+    if (guildId && config.enabledGroups.includes(guildId)) {
+      // 检测是否为档案格式的消息（包含关键字段）
+      const profileKeywords = ['真实姓名', '第几届学生', '班级', '自我描述', '是否公开'];
+      const hasMultipleKeywords = profileKeywords.filter(keyword => content.includes(keyword)).length >= 3;
+      
+      if (hasMultipleKeywords) {
+        try {
+          // 尝试用AI解析，看是否为有效的档案格式
+          const parsedData = await parseProfile(ctx, config, content)
+          
+          // 如果解析成功，说明用户发送了档案格式的消息但没有先申请
+          logger.info(`User ${userId} sent profile format message without application: ${JSON.stringify(parsedData)}`)
+          
+          return h.at(userId) + ' 检测到你发送了档案格式的消息！\n' +
+            '如果你想要保存档案，请先使用 "申请档案" 命令开始申请流程，然后再发送档案信息。\n' +
+            '💡 直接发送档案信息是不会保存的哦～'
+        } catch (error) {
+          // 解析失败，说明不是有效的档案格式，继续正常流程
+          logger.debug(`Profile format detection failed for user ${userId}: ${error.message}`)
+        }
+      }
     }
+
+    return next()
   })
 
   // 查看自己的档案
   ctx.command('我的档案', '查看自己的档案')
     .action(async ({ session }) => {
       const { userId, guildId } = session
-      if (!guildId || !config.enabledGroups.includes(guildId)) {
+      
+      // 如果在私聊中，查找用户在所有启用群组中的档案
+      if (!guildId) {
+        const allProfiles = await ctx.database.select('FileSystem')
+          .where({ userId })
+          .execute()
+        
+        if (!allProfiles || allProfiles.length === 0) {
+          return '你还没有创建档案，请在启用档案功能的群里使用"申请档案"创建。'
+        }
+        
+        // 如果有多个档案，显示所有档案
+        if (allProfiles.length === 1) {
+          const data = allProfiles[0]
+          return (
+            `你的资料：\n` +
+            `ID：${data.userId}\n` +
+            `■真实姓名：${data.realname}\n` +
+            `□届数：${data.Term}\n` +
+            `□班级：${data.Class}\n` +
+            `■自我描述：\n${data.SelfDescription}\n` +
+            `■监督性评分：${data.supervisionRating || 100} 分\n` +
+            `■积极性评分：${data.positivityRating || 100} 分\n` +
+            `■档案状态：${data.isPublic ? '公开' : '不公开'}`
+          )
+        } else {
+          // 多个档案的情况
+          let message = `你在 ${allProfiles.length} 个群中有档案：\n\n`
+          for (let i = 0; i < allProfiles.length; i++) {
+            const data = allProfiles[i]
+            message += `【档案 ${i + 1}】群组ID: ${data.groupId}\n`
+            message += `■真实姓名：${data.realname}\n`
+            message += `□届数：${data.Term}\n`
+            message += `□班级：${data.Class}\n`
+            message += `■自我描述：${data.SelfDescription}\n`
+            message += `■监督性评分：${data.supervisionRating || 100} 分\n`
+            message += `■积极性评分：${data.positivityRating || 100} 分\n`
+            message += `■档案状态：${data.isPublic ? '公开' : '不公开'}\n\n`
+          }
+          return message
+        }
+      }
+      
+      // 在群聊中的原有逻辑
+      if (!config.enabledGroups.includes(guildId)) {
         return '本群未启用同学档案功能。'
       }
 
@@ -198,11 +280,8 @@ export function FileSystem( ctx: Context , config: Config ) {
   ctx.command('查看档案 [targetUser:user]', '查看指定用户的档案')
     .alias('档案查看')
     .action(async ({ session }, targetUser) => {
-      const { guildId } = session
-      if (!guildId || !config.enabledGroups.includes(guildId)) {
-        return '本群未启用同学档案功能。'
-      }
-
+      const { guildId, userId } = session
+      
       let targetUserId: string | null = null;
       
       if (targetUser) {
@@ -215,11 +294,60 @@ export function FileSystem( ctx: Context , config: Config ) {
         logger.info(`解析后targetUserId: ${targetUserId}`);
       } else {
         // 如果没有指定目标，查看自己的档案
-        targetUserId = session.userId;
+        targetUserId = userId;
       }
 
       if (!targetUserId) {
         return '请指定要查看的用户，例如：查看档案 @用户名'
+      }
+
+      // 如果在私聊中且查看自己的档案，使用特殊逻辑
+      if (!guildId && targetUserId === userId) {
+        const allProfiles = await ctx.database.select('FileSystem')
+          .where({ userId: targetUserId })
+          .execute()
+        
+        if (!allProfiles || allProfiles.length === 0) {
+          return '你还没有创建档案，请在启用档案功能的群里使用"申请档案"创建。'
+        }
+        
+        if (allProfiles.length === 1) {
+          const data = allProfiles[0]
+          return (
+            `你的资料：\n` +
+            `ID：${data.userId}\n` +
+            `■真实姓名：${data.realname}\n` +
+            `□届数：${data.Term}\n` +
+            `□班级：${data.Class}\n` +
+            `■自我描述：\n${data.SelfDescription}\n` +
+            `■监督性评分：${data.supervisionRating || 100} 分\n` +
+            `■积极性评分：${data.positivityRating || 100} 分\n` +
+            `■档案状态：${data.isPublic ? '公开' : '不公开'}`
+          )
+        } else {
+          let message = `你在 ${allProfiles.length} 个群中有档案：\n\n`
+          for (let i = 0; i < allProfiles.length; i++) {
+            const data = allProfiles[i]
+            message += `【档案 ${i + 1}】群组ID: ${data.groupId}\n`
+            message += `■真实姓名：${data.realname}\n`
+            message += `□届数：${data.Term}\n`
+            message += `□班级：${data.Class}\n`
+            message += `■自我描述：${data.SelfDescription}\n`
+            message += `■监督性评分：${data.supervisionRating || 100} 分\n`
+            message += `■积极性评分：${data.positivityRating || 100} 分\n`
+            message += `■档案状态：${data.isPublic ? '公开' : '不公开'}\n\n`
+          }
+          return message
+        }
+      }
+      
+      // 在私聊中查看他人档案或在群聊中的逻辑
+      if (!guildId) {
+        return '在私聊中只能查看自己的档案，查看他人档案请在对应群聊中使用此命令。'
+      }
+      
+      if (!config.enabledGroups.includes(guildId)) {
+        return '本群未启用同学档案功能。'
       }
 
       // 使用数据库查询
@@ -235,13 +363,13 @@ export function FileSystem( ctx: Context , config: Config ) {
       const data = profiles[0]
 
       // 隐私检查
-      if (!data.isPublic && data.userId !== session.userId) {
+      if (!data.isPublic && data.userId !== userId) {
         return '该用户的档案设置为不公开，你无法查看。'
       }
       
       // 获取目标用户的昵称或名称
       let authorName = '该用户'
-      if (targetUserId === session.userId) {
+      if (targetUserId === userId) {
         authorName = '你'
       } else {
         try {
@@ -296,6 +424,18 @@ export function FileSystem( ctx: Context , config: Config ) {
         groupId: session.guildId 
       }, { isPublic: false })
       return '你的档案已设置为不公开。'
+    })
+
+  // 调试命令：检查申请状态
+  ctx.command('检查申请状态', { authority: 4 })
+    .action(async ({ session }) => {
+      const { userId } = session
+      if (applicationStates.has(userId)) {
+        const state = applicationStates.get(userId)
+        return `用户 ${userId} 正在申请档案，目标群组: ${state.guildId}`
+      } else {
+        return `用户 ${userId} 当前没有进行中的档案申请`
+      }
     })
 }
 

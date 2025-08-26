@@ -1,6 +1,6 @@
 import { Context } from 'koishi';
 import { Config } from '../../config';
-import { setGroupAdmin } from '../../Utils/Group/GroupAdminManagement';
+import { setGroupAdmin, isGroupAdmin } from '../../Utils/Group/GroupAdminManagement';
 
 export function ReelectionPoll(ctx: Context, config: Config) {
   const logger = ctx.logger('gipas:reelection-poll');
@@ -35,6 +35,8 @@ export function ReelectionPoll(ctx: Context, config: Config) {
 
   // 处理连任投票逻辑
   async function processReelectionVote(guildId: string, voterId: string, adminUserId: string, isSupport: boolean): Promise<string> {
+    // 统一用户ID格式，去除平台前缀
+    adminUserId = adminUserId.includes(':') ? adminUserId.split(':').pop() : adminUserId;
     try {
       // 检查被投票的用户是否是管理员
       const admin = await ctx.database.get('Administrator', {
@@ -44,7 +46,15 @@ export function ReelectionPoll(ctx: Context, config: Config) {
       });
 
       if (admin.length === 0) {
-        return '❌ 该用户不是当前管理员';
+        // 如果数据库中没有找到，尝试从QQ群实际权限检查
+        const isActualAdmin = await isGroupAdmin(ctx, guildId, adminUserId);
+        
+        if (!isActualAdmin) {
+          return '❌ 该用户不是当前管理员';
+        }
+        
+        // 如果是实际管理员但数据库中没有记录，提示需要同步
+        return '❌ 该用户虽然是QQ群管理员，但未在系统中注册\n💡 请使用 "同步管理员权限" 命令同步管理员信息';
       }
 
       const administrator = admin[0];
