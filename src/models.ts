@@ -146,6 +146,7 @@ export function Database(ctx: Context) {
     supportVotes: { type: 'unsigned', initial: 0 },
     opposeVotes: { type: 'unsigned', initial: 0 },
     totalVotes: { type: 'unsigned', initial: 0 },
+    requiredVotes: { type: 'unsigned', initial: 10 },
     reason: { type: 'text' },
     result: { type: 'text' }
   }, {

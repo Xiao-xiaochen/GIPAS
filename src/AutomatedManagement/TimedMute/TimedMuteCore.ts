@@ -1,6 +1,6 @@
 import { Context } from 'koishi';
 import { Config } from '../../config';
-import { SetGroupMute } from '../../Utils/Onebot/OnebotOperate';
+import { SetGroupMute } from '../../Utils/OneBot/OnebotOperate';
 import { HolidayService } from '../../Utils/System/HolidayService';
 
 export function TimedMute(ctx: Context, config: Config) {
@@ -11,16 +11,37 @@ export function TimedMute(ctx: Context, config: Config) {
   const registeredJobs = new Map<string, () => void>();
   // 存储手动覆盖设置
   const manualOverrides = new Map<string, { date: string; useHolidayConfig: boolean; setBy: string; setAt: Date }>();
+  // 防止重复初始化的标志
+  let isInitializing = false;
+  let isInitialized = false;
 
   // 初始化定时禁言
   async function initTimedMute() {
-    // 清除之前的定时任务
-    registeredJobs.forEach(dispose => dispose());
-    registeredJobs.clear();
+    if (isInitializing) {
+      logger.warn('定时禁言系统正在初始化中，跳过重复初始化');
+      return;
+    }
+    
+    isInitializing = true;
+    
+    try {
+      logger.info('开始初始化定时禁言系统');
+      
+      // 清除之前的定时任务
+      registeredJobs.forEach(dispose => dispose());
+      registeredJobs.clear();
 
-    // 为每个配置的群组设置定时任务
-    for (const groupConfig of config.timedMuteGroups) {
-      await setupGroupSchedules(groupConfig);
+      // 为每个配置的群组设置定时任务
+      for (const groupConfig of config.timedMuteGroups) {
+        await setupGroupSchedules(groupConfig);
+      }
+      
+      isInitialized = true;
+      logger.info('定时禁言系统初始化完成');
+    } catch (error) {
+      logger.error('定时禁言系统初始化失败:', error);
+    } finally {
+      isInitializing = false;
     }
   }
 
@@ -29,6 +50,13 @@ export function TimedMute(ctx: Context, config: Config) {
     const { guildId } = groupConfig;
     
     try {
+      // 检查是否已经为该群组设置过任务
+      const existingJobs = Array.from(registeredJobs.keys()).filter(key => key.includes(guildId));
+      if (existingJobs.length > 0) {
+        logger.debug(`群组 ${guildId} 已存在定时任务，跳过重复设置`);
+        return;
+      }
+      
       // 获取明天的日期
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
@@ -297,22 +325,35 @@ export function TimedMute(ctx: Context, config: Config) {
   });
   registeredJobs.set('daily-reset', dailyResetDispose);
 
-  // 监听配置变化，重新初始化定时任务（但避免无限循环）
-  let isInitializing = false;
+  // 监听配置变化，重新初始化定时任务（防止重复初始化）
+  let configChangeTimeout: NodeJS.Timeout | null = null;
   ctx.on('config', () => {
-    if (isInitializing) return;
-    logger.info('配置已更新，重新初始化定时禁言任务');
-    isInitializing = true;
-    setTimeout(async () => {
+    if (isInitializing) {
+      logger.debug('定时禁言系统正在初始化中，忽略配置变化事件');
+      return;
+    }
+    
+    // 使用防抖机制，避免配置频繁变化导致的重复初始化
+    if (configChangeTimeout) {
+      clearTimeout(configChangeTimeout);
+    }
+    
+    configChangeTimeout = setTimeout(async () => {
+      logger.info('配置已更新，重新初始化定时禁言任务');
       await initTimedMute();
-      isInitializing = false;
-    }, 100);
+      configChangeTimeout = null;
+    }, 500); // 500ms防抖延迟
   });
 
-  // 插件启动时初始化（延迟执行避免配置冲突）
+  // 插件启动时初始化（只初始化一次）
   ctx.on('ready', () => {
+    if (isInitialized) {
+      logger.debug('定时禁言系统已初始化，跳过重复初始化');
+      return;
+    }
+    
     setTimeout(async () => {
-      logger.info('初始化智能定时禁言系统');
+      logger.info('插件启动，初始化智能定时禁言系统');
       await initTimedMute();
     }, 1000);
   });
@@ -320,9 +361,25 @@ export function TimedMute(ctx: Context, config: Config) {
   // 插件卸载时清理定时任务
   ctx.on('dispose', () => {
     logger.info('清理定时禁言任务');
+    
+    // 清理配置变化的防抖定时器
+    if (configChangeTimeout) {
+      clearTimeout(configChangeTimeout);
+      configChangeTimeout = null;
+    }
+    
+    // 清理所有注册的定时任务
     registeredJobs.forEach(dispose => dispose());
     registeredJobs.clear();
+    
+    // 清理手动覆盖设置
     manualOverrides.clear();
+    
+    // 重置初始化状态
+    isInitializing = false;
+    isInitialized = false;
+    
+    logger.info('定时禁言任务清理完成');
   });
 
   // 添加手动控制命令

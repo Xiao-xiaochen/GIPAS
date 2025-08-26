@@ -300,13 +300,33 @@ export function RegularPowerTransfer(ctx: Context, config: Config) {
       if (!bot) return 10; // 默认值
       
       try {
-        // 使用 bot.internal.getGroupInfo 获取群信息
+        // 首先尝试使用 getGroupMemberList 获取成员列表（更准确）
+        try {
+          const memberList = await bot.internal.getGroupMemberList(guildId);
+          if (memberList && memberList.length > 0) {
+            const memberCount = memberList.length;
+            // 计算所需票数：群成员数的10%，最少5票，最多20票
+            const requiredVotes = Math.max(5, Math.min(20, Math.ceil(memberCount * 0.1)));
+            logger.info(`群 ${guildId} 成员数(通过成员列表): ${memberCount}, 弹劾所需票数: ${requiredVotes}`);
+            return requiredVotes;
+          }
+        } catch (memberListError) {
+          logger.warn(`通过成员列表获取群 ${guildId} 成员数失败:`, memberListError);
+        }
+        
+        // 如果成员列表获取失败，尝试使用 getGroupInfo
         const groupInfo = await bot.internal.getGroupInfo(guildId);
-        const memberCount = groupInfo?.memberCount || 0;
+        let memberCount = groupInfo?.memberCount || 0;
+        
+        // 如果获取到的成员数为0，使用默认值50
+        if (memberCount === 0) {
+          logger.warn(`群 ${guildId} 成员数获取为0，使用默认值50`);
+          memberCount = 50;
+        }
         
         // 计算所需票数：群成员数的10%，最少5票，最多20票
         const requiredVotes = Math.max(5, Math.min(20, Math.ceil(memberCount * 0.1)));
-        logger.info(`群 ${guildId} 成员数: ${memberCount}, 弹劾所需票数: ${requiredVotes}`);
+        logger.info(`群 ${guildId} 成员数(通过群信息): ${memberCount}, 弹劾所需票数: ${requiredVotes}`);
         return requiredVotes;
       } catch (error) {
         logger.error(`获取群 ${guildId} 成员数失败:`, error);
@@ -970,7 +990,7 @@ ctx.command('取消弹劾 <adminUser:user>')
               message += `🎯 当前趋势: 弹劾失败，管理员留任\n`;
             }
           } else {
-            message += `⏳ 票数不足，还需 ${5 - totalVotes} 票\n`;
+            message += `⏳ 票数不足，还需 ${requiredVotes - totalVotes} 票\n`;
           }
           message += '\n';
         }
