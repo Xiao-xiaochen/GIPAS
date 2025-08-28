@@ -1,7 +1,9 @@
 import { createCanvas } from '@napi-rs/canvas';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ThemeConfig } from './ThemeManager';
+import { ThemeConfig , ThemeManager } from './ThemeManager';
+
+
 
 /**
  * 图表渲染器
@@ -238,6 +240,195 @@ export class ChartRenderer {
     ctx.stroke();
   }
 
+
+  public async createModernBarChart(
+    title: string,
+    data: Array<{name: string, value: number}>,
+    theme: ThemeConfig,
+    subtitle?: string
+  ): Promise<string> {
+    const width = 1200;
+    const height = 800;
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d') as any;
+    
+    // 设置背景
+    const gradient = ctx.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, theme.backgroundGradient[0]);
+    gradient.addColorStop(1, theme.backgroundGradient[1]);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+    
+    // 添加纹理
+    this.addTexturePattern(ctx, width, height, theme);
+    
+    // 绘制标题
+    this.drawBarChartTitle(ctx, title, subtitle, width, theme);
+    
+    // 图表区域参数
+    const chartArea = {
+      x: 120,
+      y: 160,
+      width: width - 240,
+      height: height - 280
+    };
+    
+    // 绘制柱状图
+    this.drawModernBars(ctx, data, chartArea, theme);
+    
+    // 绘制坐标轴
+    this.drawAxes(ctx, data, chartArea, theme);
+    
+    // 添加装饰
+    this.addDecorativeElements(ctx, width, height, theme);
+    
+    // 保存图片
+    const filename = `bar_chart_${Date.now()}.png`;
+    const filePath = path.join(this.tempDir, filename);
+    
+    const buffer = canvas.toBuffer('image/png');
+    fs.writeFileSync(filePath, buffer);
+    
+    return filePath;
+  }
+
+  private drawBarChartTitle(ctx: any, title: string, subtitle: string | undefined, width: number, theme: ThemeConfig) {
+    ctx.fillStyle = theme.textPrimary;
+    ctx.font = 'bold 32px "Microsoft YaHei", Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(title, width / 2, 60);
+    
+    if (subtitle) {
+      ctx.fillStyle = theme.textSecondary;
+      ctx.font = '18px "Microsoft YaHei", Arial, sans-serif';
+      ctx.fillText(subtitle, width / 2, 90);
+    }
+    
+    // 装饰线
+    const lineGradient = ctx.createLinearGradient(width / 2 - 150, 0, width / 2 + 150, 0);
+    lineGradient.addColorStop(0, 'transparent');
+    lineGradient.addColorStop(0.5, theme.accentColor);
+    lineGradient.addColorStop(1, 'transparent');
+    
+    ctx.strokeStyle = lineGradient;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(width / 2 - 150, 110);
+    ctx.lineTo(width / 2 + 150, 110);
+    ctx.stroke();
+  }
+
+  private drawModernBars(
+    ctx: any,
+    data: Array<{name: string, value: number}>,
+    chartArea: {x: number, y: number, width: number, height: number},
+    theme: ThemeConfig
+  ) {
+    const maxValue = Math.max(...data.map(d => d.value));
+    const barWidth = chartArea.width / data.length * 0.7;
+    const barSpacing = chartArea.width / data.length * 0.3;
+    
+    ctx.shadowColor = theme.shadowColor;
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetY = 4;
+    
+    data.forEach((item, index) => {
+      const barHeight = (item.value / maxValue) * chartArea.height;
+      const x = chartArea.x + index * (barWidth + barSpacing) + barSpacing / 2;
+      const y = chartArea.y + chartArea.height - barHeight;
+      
+      const color = theme.chartColors[index % theme.chartColors.length];
+      
+      // 创建渐变效果
+      const barGradient = ctx.createLinearGradient(x, y, x, y + barHeight);
+      barGradient.addColorStop(0, color);
+      barGradient.addColorStop(1, color + '80');
+      
+      // 绘制柱子
+      ctx.fillStyle = barGradient;
+      this.drawRoundedRect(ctx, x, y, barWidth, barHeight, 8);
+      ctx.fill();
+      
+      // 重置阴影
+      ctx.shadowColor = 'transparent';
+      
+      // 绘制边框
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      
+      // 绘制数值标签
+      ctx.fillStyle = theme.textPrimary;
+      ctx.font = 'bold 14px "Microsoft YaHei", Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(item.value.toString(), x + barWidth / 2, y - 10);
+      
+      // 绘制类别标签
+      ctx.fillStyle = theme.textSecondary;
+      ctx.font = '12px "Microsoft YaHei", Arial, sans-serif';
+      ctx.save();
+      ctx.translate(x + barWidth / 2, chartArea.y + chartArea.height + 20);
+      ctx.rotate(-Math.PI / 6); // 倾斜45度
+      ctx.textAlign = 'right';
+      ctx.fillText(item.name, 0, 0);
+      ctx.restore();
+    });
+  }
+
+  private drawAxes(
+    ctx: any,
+    data: Array<{name: string, value: number}>,
+    chartArea: {x: number, y: number, width: number, height: number},
+    theme: ThemeConfig
+  ) {
+    const maxValue = Math.max(...data.map(d => d.value));
+    
+    // Y轴
+    ctx.strokeStyle = theme.borderColor;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(chartArea.x, chartArea.y);
+    ctx.lineTo(chartArea.x, chartArea.y + chartArea.height);
+    ctx.stroke();
+    
+    // X轴
+    ctx.beginPath();
+    ctx.moveTo(chartArea.x, chartArea.y + chartArea.height);
+    ctx.lineTo(chartArea.x + chartArea.width, chartArea.y + chartArea.height);
+    ctx.stroke();
+    
+    // Y轴刻度和标签
+    const ySteps = 5;
+    for (let i = 0; i <= ySteps; i++) {
+      const value = (maxValue / ySteps) * i;
+      const y = chartArea.y + chartArea.height - (i / ySteps) * chartArea.height;
+      
+      // 刻度线
+      ctx.strokeStyle = theme.borderColor + '40';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(chartArea.x - 5, y);
+      ctx.lineTo(chartArea.x + chartArea.width, y);
+      ctx.stroke();
+      
+      // 标签
+      ctx.fillStyle = theme.textSecondary;
+      ctx.font = '12px "Microsoft YaHei", Arial, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(Math.round(value).toString(), chartArea.x - 10, y + 4);
+    }
+    
+    // Y轴标题
+    ctx.fillStyle = theme.textPrimary;
+    ctx.font = 'bold 14px "Microsoft YaHei", Arial, sans-serif';
+    ctx.save();
+    ctx.translate(30, chartArea.y + chartArea.height / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.fillText('人数', 0, 0);
+    ctx.restore();
+  }
+
   private drawRoundedRect(ctx: any, x: number, y: number, width: number, height: number, radius: number) {
     ctx.beginPath();
     ctx.moveTo(x + radius, y);
@@ -251,4 +442,5 @@ export class ChartRenderer {
     ctx.quadraticCurveTo(x, y, x + radius, y);
     ctx.closePath();
   }
+
 }

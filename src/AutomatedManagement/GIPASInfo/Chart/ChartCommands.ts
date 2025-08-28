@@ -1,7 +1,13 @@
-import { Context } from 'koishi';
+
+
+
+import { Context , h } from 'koishi';
 import { segment } from 'koishi';
 import { Config } from '../../../config';
 import { ChartGenerator } from './ChartGenerator';
+import { ChartRenderer } from './ChartRenderer';
+
+
 
 /**
  * 图表命令管理器
@@ -238,6 +244,90 @@ export function addChartCommands(ctx: Context, config: Config) {
       }
     });
 
+  // 各届班级分布柱状图命令
+  ctx.command('各届班级柱状图', { authority: 2 })
+    .action(async ({ session }) => {
+      if (!session) {
+        return '无效的会话';
+      }
+
+      try {
+        const guildId = session.guildId;
+        if (!guildId) {
+          return '此命令只能在群聊中使用';
+        }
+
+        if (!config.enabledGroups.includes(guildId)) {
+          return '此群未启用档案系统';
+        }
+
+        await session.send('📊 正在生成各届班级分布柱状图...');
+        
+        const chartPath = await chartGenerator.generateTermClassBarChart(guildId);
+        
+        return segment.image(`file://${chartPath}`);
+      } catch (error) {
+        logger.error('生成各届班级分布柱状图失败:', error);
+        return '❌ 生成统计图失败: ' + error.message;
+      }
+    });
+
+  // 届数分布柱状图命令
+  ctx.command('届数柱状图', { authority: 2 })
+    .action(async ({ session }) => {
+      if (!session) {
+        return '无效的会话';
+      }
+
+      try {
+        const guildId = session.guildId;
+        if (!guildId) {
+          return '此命令只能在群聊中使用';
+        }
+
+        if (!config.enabledGroups.includes(guildId)) {
+          return '此群未启用档案系统';
+        }
+
+        await session.send('📈 正在生成届数分布柱状图...');
+        
+        const chartPath = await chartGenerator.generateTermDistributionBarChart(guildId);
+        
+        return segment.image(`file://${chartPath}`);
+      } catch (error) {
+        logger.error('生成届数分布柱状图失败:', error);
+        return '❌ 生成统计图失败: ' + error.message;
+      }
+    });
+
+  // 班级分布柱状图命令
+  ctx.command('班级柱状图', { authority: 2 })
+    .action(async ({ session }) => {
+      if (!session) {
+        return '无效的会话';
+      }
+
+      try {
+        const guildId = session.guildId;
+        if (!guildId) {
+          return '此命令只能在群聊中使用';
+        }
+
+        if (!config.enabledGroups.includes(guildId)) {
+          return '此群未启用档案系统';
+        }
+
+        await session.send('📊 正在生成班级分布柱状图...');
+        
+        const chartPath = await chartGenerator.generateClassDistributionBarChart(guildId);
+        
+        return segment.image(`file://${chartPath}`);
+      } catch (error) {
+        logger.error('生成班级分布柱状图失败:', error);
+        return '❌ 生成统计图失败: ' + error.message;
+      }
+    });
+
   // 手动切换主题命令
   ctx.command('切换图表主题 [theme:string]', { authority: 2 })
     .action(async ({ session }, theme) => {
@@ -260,9 +350,50 @@ export function addChartCommands(ctx: Context, config: Config) {
     });
 
   // 清理资源
+  // 图表帮助命令
+  ctx.command('图表帮助', { authority: 1 })
+    .action(async ({ session }) => {
+      if (!session) {
+        return '无效的会话';
+      }
+
+      const helpMessage = [
+        '📊 GIPAS 现代化图表系统',
+        '',
+        '🥧 饼图命令:',
+        '• 档案统计 - 档案填写情况饼图',
+        '• 完整档案统计 - 完整档案填写情况饼图',
+        '• 完整档案班级统计 - 完整档案用户班级分布饼图',
+        '• 届数统计 - 群内届数分布饼图',
+        '• 班级统计 - 群内班级分布饼图',
+        '• 各届班级饼图 - 各届班级分布饼图',
+        '',
+        '📊 柱状图命令:',
+        '• 各届班级柱状图 - 各届班级分布柱状图',
+        '• 届数柱状图 - 届数分布柱状图',
+        '• 班级柱状图 - 班级分布柱状图',
+        '',
+        '🔧 数据管理命令:',
+        '• 标准化档案数据 - 标准化数据库中的档案格式',
+        '• 简化届数格式 - 将完整中文届数转为简化格式',
+        '• 自动建档案 - 根据群头衔自动创建档案',
+        '',
+        '🎨 主题设置:',
+        '• 切换图表主题 [light/dark] - 手动切换主题',
+        '• 系统会根据时间自动切换主题 (18:00-6:00深色)',
+        '',
+        '💡 提示: 所有图表都支持深色/浅色主题，具有现代化设计风格'
+      ].join('\n');
+
+      return helpMessage;
+    });
+
+  // 清理资源
   ctx.on('dispose', () => {
     chartGenerator.dispose();
   });
 
   logger.info('🎨 GIPAS现代化图表命令已加载 (模块化版本)');
+  logger.info('📊 新增柱状图功能: 各届班级柱状图、届数柱状图、班级柱状图');
+
 }

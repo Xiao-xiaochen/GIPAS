@@ -3,7 +3,21 @@ import { Config } from '../../config';
 import { SetGroupMute } from '../../Utils/OneBot/OnebotOperate';
 import { HolidayService } from '../../Utils/System/HolidayService';
 
+// 全局锁，防止多个 TimedMute 实例同时运行
+let globalTimedMuteInstance: any = null;
+
 export function TimedMute(ctx: Context, config: Config) {
+  // 如果已经有实例在运行，先清理它
+  if (globalTimedMuteInstance) {
+    const logger = ctx.logger('gipas:timed-mute');
+    logger.warn('检测到已存在的 TimedMute 实例，正在清理...');
+    
+    // 触发之前实例的清理
+    if (globalTimedMuteInstance.dispose) {
+      globalTimedMuteInstance.dispose();
+    }
+    globalTimedMuteInstance = null;
+  }
   const logger = ctx.logger('gipas:timed-mute');
   const holidayService = new HolidayService(ctx, config);
   
@@ -16,9 +30,14 @@ export function TimedMute(ctx: Context, config: Config) {
   let isInitialized = false;
 
   // 初始化定时禁言
-  async function initTimedMute() {
+  async function initTimedMute(force: boolean = false) {
     if (isInitializing) {
       logger.warn('定时禁言系统正在初始化中，跳过重复初始化');
+      return;
+    }
+    
+    if (isInitialized && !force) {
+      logger.debug('定时禁言系统已初始化，跳过重复初始化');
       return;
     }
     
@@ -27,9 +46,19 @@ export function TimedMute(ctx: Context, config: Config) {
     try {
       logger.info('开始初始化定时禁言系统');
       
-      // 清除之前的定时任务
-      registeredJobs.forEach(dispose => dispose());
+      // 清除之前的定时任务（除了daily-reset任务）
+      const dailyResetDispose = registeredJobs.get('daily-reset');
+      registeredJobs.forEach((dispose, key) => {
+        if (key !== 'daily-reset') {
+          dispose();
+        }
+      });
       registeredJobs.clear();
+      
+      // 重新添加daily-reset任务
+      if (dailyResetDispose) {
+        registeredJobs.set('daily-reset', dailyResetDispose);
+      }
 
       // 为每个配置的群组设置定时任务
       for (const groupConfig of config.timedMuteGroups) {
@@ -321,7 +350,7 @@ export function TimedMute(ctx: Context, config: Config) {
   // 每天凌晨重新设置定时任务
   const dailyResetDispose = ctx.cron('0 0 0 * * *', async () => {
     logger.info('每日重置定时禁言任务');
-    await initTimedMute();
+    await initTimedMute(true);
   });
   registeredJobs.set('daily-reset', dailyResetDispose);
 
@@ -340,26 +369,28 @@ export function TimedMute(ctx: Context, config: Config) {
     
     configChangeTimeout = setTimeout(async () => {
       logger.info('配置已更新，重新初始化定时禁言任务');
-      await initTimedMute();
+      await initTimedMute(true);
       configChangeTimeout = null;
     }, 500); // 500ms防抖延迟
   });
 
   // 插件启动时初始化（只初始化一次）
+  let readyInitialized = false;
   ctx.on('ready', () => {
-    if (isInitialized) {
+    if (isInitialized || readyInitialized) {
       logger.debug('定时禁言系统已初始化，跳过重复初始化');
       return;
     }
     
+    readyInitialized = true;
     setTimeout(async () => {
       logger.info('插件启动，初始化智能定时禁言系统');
       await initTimedMute();
     }, 1000);
   });
 
-  // 插件卸载时清理定时任务
-  ctx.on('dispose', () => {
+  // 创建清理函数
+  const disposeInstance = () => {
     logger.info('清理定时禁言任务');
     
     // 清理配置变化的防抖定时器
@@ -379,8 +410,16 @@ export function TimedMute(ctx: Context, config: Config) {
     isInitializing = false;
     isInitialized = false;
     
+    // 清理全局实例引用
+    if (globalTimedMuteInstance === instanceAPI) {
+      globalTimedMuteInstance = null;
+    }
+    
     logger.info('定时禁言任务清理完成');
-  });
+  };
+
+  // 插件卸载时清理定时任务
+  ctx.on('dispose', disposeInstance);
 
   // 添加手动控制命令
   ctx.command('定时禁言状态', { authority: 3 })
@@ -440,7 +479,7 @@ export function TimedMute(ctx: Context, config: Config) {
   ctx.command('重载定时禁言', { authority: 4 })
     .action(async () => {
       try {
-        await initTimedMute();
+        await initTimedMute(true);
         return '智能定时禁言任务已重新加载';
       } catch (error) {
         logger.error('重载定时禁言任务失败:', error);
@@ -449,12 +488,18 @@ export function TimedMute(ctx: Context, config: Config) {
     });
 
   // 导出管理函数供其他模块使用
-  return {
+  const instanceAPI = {
     setManualOverride,
     clearManualOverride,
     hasManualOverride,
     getManualOverride,
     determineScheduleType,
-    initTimedMute
+    initTimedMute,
+    dispose: disposeInstance
   };
+
+  // 设置全局实例引用
+  globalTimedMuteInstance = instanceAPI;
+  
+  return instanceAPI;
 }

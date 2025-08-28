@@ -356,6 +356,128 @@ export class ChartGenerator {
   }
 
   /**
+  /**
+   * 生成各届班级分布柱状图
+   */
+  async generateTermClassBarChart(guildId: string): Promise<string> {
+    try {
+      await this.autoCreateProfilesFromTitles(guildId);
+
+      const profiles = await this.ctx.database.get('FileSystem', { groupId: guildId });
+      if (!profiles || profiles.length === 0) {
+        throw new Error('未找到任何档案数据');
+      }
+
+      // 按届数和班级统计
+      const termClassStats = new Map<string, number>();
+      
+      profiles.forEach(profile => {
+        const normalizedTerm = this.dataNormalizer.normalizeTermFormat(profile.Term);
+        const normalizedClass = this.dataNormalizer.normalizeClassFormat(profile.Class);
+        
+        if (normalizedTerm && normalizedClass) {
+          const key = `${normalizedTerm}-${normalizedClass}`;
+          termClassStats.set(key, (termClassStats.get(key) || 0) + 1);
+        }
+      });
+
+      if (termClassStats.size === 0) {
+        throw new Error('未找到有效的届数班级信息');
+      }
+
+      const chartData = Array.from(termClassStats.entries())
+        .map(([termClass, count]) => ({ name: termClass, value: count }))
+        .sort((a, b) => {
+          // 按届数排序，然后按班级排序
+          const [termA, classA] = a.name.split('-');
+          const [termB, classB] = b.name.split('-');
+          if (termA !== termB) {
+            return termA.localeCompare(termB);
+          }
+          return classA.localeCompare(classB);
+        });
+
+      return await this.chartRenderer.createModernBarChart(
+        '各届班级分布统计',
+        chartData,
+        this.themeManager.getCurrentTheme(),
+        `共 ${chartData.length} 个班级，${chartData.reduce((sum, item) => sum + item.value, 0)} 人`
+      );
+    } catch (error) {
+      this.logger.error('生成各届班级分布柱状图失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 生成届数分布柱状图
+   */
+  async generateTermDistributionBarChart(guildId: string): Promise<string> {
+    try {
+      await this.autoCreateProfilesFromTitles(guildId);
+
+      const profiles = await this.ctx.database.get('FileSystem', { groupId: guildId });
+      if (!profiles || profiles.length === 0) {
+        throw new Error('未找到任何档案数据');
+      }
+
+      const termStats = this.dataNormalizer.getTermDistribution(profiles);
+
+      if (termStats.size === 0) {
+        throw new Error('未找到有效的届数信息');
+      }
+
+      const chartData = Array.from(termStats.entries())
+        .map(([term, count]) => ({ name: term, value: count }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      return await this.chartRenderer.createModernBarChart(
+        '群内届数分布统计',
+        chartData,
+        this.themeManager.getCurrentTheme(),
+        `共 ${chartData.length} 个届数，${chartData.reduce((sum, item) => sum + item.value, 0)} 人`
+      );
+    } catch (error) {
+      this.logger.error('生成届数分布柱状图失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 生成班级分布柱状图
+   */
+  async generateClassDistributionBarChart(guildId: string): Promise<string> {
+    try {
+      await this.autoCreateProfilesFromTitles(guildId);
+
+      const profiles = await this.ctx.database.get('FileSystem', { groupId: guildId });
+      if (!profiles || profiles.length === 0) {
+        throw new Error('未找到任何档案数据');
+      }
+
+      const classStats = this.dataNormalizer.getClassDistribution(profiles);
+
+      if (classStats.size === 0) {
+        throw new Error('未找到有效的班级信息');
+      }
+
+      const chartData = Array.from(classStats.entries())
+        .map(([className, count]) => ({ name: className, value: count }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      return await this.chartRenderer.createModernBarChart(
+        '群内班级分布统计',
+        chartData,
+        this.themeManager.getCurrentTheme(),
+        `共 ${chartData.length} 个班级，${chartData.reduce((sum, item) => sum + item.value, 0)} 人`
+      );
+    } catch (error) {
+      this.logger.error('生成班级分布柱状图失败:', error);
+      throw error;
+    }
+  }
+
+  /**
    * 销毁资源
    */
   public dispose() {

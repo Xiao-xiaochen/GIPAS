@@ -39,7 +39,7 @@ export function setupManualOverrideCommands(ctx: Context, config: Config, timedM
         timedMuteCore.setManualOverride(guildId, tomorrowStr, useHolidayConfig, userName);
         
         // 重新初始化定时任务以应用新设置
-        await timedMuteCore.initTimedMute();
+        await timedMuteCore.initTimedMute(true);
         
         return `✅ 已设置群组 ${guildId} 明天 (${tomorrowStr}) 使用${type}配置\n设置者: ${userName}\n\n💡 系统将在今晚重新加载定时任务以应用此设置`;
         
@@ -75,7 +75,7 @@ export function setupManualOverrideCommands(ctx: Context, config: Config, timedM
         
         if (existed) {
           // 重新初始化定时任务以应用新设置
-          await timedMuteCore.initTimedMute();
+          await timedMuteCore.initTimedMute(true);
           
           // 获取自动判断的结果
           const autoType = await timedMuteCore.determineScheduleType(guildId, tomorrowStr);
