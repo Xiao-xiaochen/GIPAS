@@ -218,6 +218,190 @@ export function TimedMute(ctx: Context, config: Config) {
     }
   }
 
+  // 紧急设置今天剩余时间的定时任务
+  async function setupTodayEmergencySchedules(groupConfig: any, configType: string) {
+    const { guildId } = groupConfig;
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    
+    try {
+      // 清除该群组今天的所有定时任务（保留明天的任务和daily-reset）
+      const todayJobKeys = Array.from(registeredJobs.keys()).filter(key => 
+        key.includes(guildId) && !key.includes('daily-reset')
+      );
+      
+      todayJobKeys.forEach(key => {
+        const dispose = registeredJobs.get(key);
+        if (dispose) {
+          dispose();
+          registeredJobs.delete(key);
+        }
+      });
+      
+      logger.info(`已清除群组 ${guildId} 的现有定时任务，准备设置紧急配置`);
+      
+      // 获取对应配置的时间表
+      const schedules = configType === 'holiday' 
+        ? groupConfig.holidaySchedules 
+        : groupConfig.workdaySchedules;
+      
+      const configTypeName = configType === 'holiday' ? '节假日' : '工作日';
+      
+      // 检查并设置第一组任务
+      if (schedules.schedule1.enabled) {
+        await setupEmergencySchedule(
+          guildId, 
+          schedules.schedule1.muteTime, 
+          schedules.schedule1.unmuteTime, 
+          `紧急${configTypeName}第一组`,
+          currentHour,
+          currentMinute
+        );
+      }
+      
+      // 检查并设置第二组任务
+      if (schedules.schedule2.enabled) {
+        await setupEmergencySchedule(
+          guildId, 
+          schedules.schedule2.muteTime, 
+          schedules.schedule2.unmuteTime, 
+          `紧急${configTypeName}第二组`,
+          currentHour,
+          currentMinute
+        );
+      }
+      
+      logger.info(`群组 ${guildId} 紧急调整为${configTypeName}配置完成`);
+      
+    } catch (error) {
+      logger.error(`设置群组 ${guildId} 紧急配置失败:`, error);
+      throw error;
+    }
+  }
+
+  // 设置紧急定时任务（只设置当前时间之后的任务）
+  async function setupEmergencySchedule(guildId: string, muteTime: string, unmuteTime: string, scheduleName: string, currentHour: number, currentMinute: number) {
+    try {
+      // 提取禁言和解禁时间
+      const muteTimeInfo = extractTimeFromCron(muteTime);
+      const unmuteTimeInfo = extractTimeFromCron(unmuteTime);
+      
+      if (!muteTimeInfo || !unmuteTimeInfo) {
+        logger.error(`无法解析时间: 禁言 ${muteTime}, 解禁 ${unmuteTime}`);
+        return;
+      }
+      
+      const currentTotalMinutes = currentHour * 60 + currentMinute;
+      const muteTotalMinutes = muteTimeInfo.hours * 60 + muteTimeInfo.minutes;
+      const unmuteTotalMinutes = unmuteTimeInfo.hours * 60 + unmuteTimeInfo.minutes;
+      
+      // 如果禁言时间还没到，设置提醒和禁言任务
+      if (muteTotalMinutes > currentTotalMinutes) {
+        // 设置提醒任务（如果时间允许）
+        const remind5Minutes = muteTotalMinutes - 5;
+        const remind3Minutes = muteTotalMinutes - 3;
+        const remind1Minute = muteTotalMinutes - 1;
+        
+        if (remind5Minutes > currentTotalMinutes) {
+          const remind5Hour = Math.floor(remind5Minutes / 60);
+          const remind5Min = remind5Minutes % 60;
+          const remind5Cron = `0 ${remind5Min} ${remind5Hour} * * *`;
+          const remind5Key = `remind5-${guildId}-${scheduleName}`;
+          const remind5Dispose = ctx.cron(remind5Cron, async () => {
+            await sendGroupMessage(guildId, `⚠️ 紧急提醒：5分钟后将开始禁言 (${scheduleName})`);
+          });
+          registeredJobs.set(remind5Key, remind5Dispose);
+        }
+        
+        if (remind3Minutes > currentTotalMinutes) {
+          const remind3Hour = Math.floor(remind3Minutes / 60);
+          const remind3Min = remind3Minutes % 60;
+          const remind3Cron = `0 ${remind3Min} ${remind3Hour} * * *`;
+          const remind3Key = `remind3-${guildId}-${scheduleName}`;
+          const remind3Dispose = ctx.cron(remind3Cron, async () => {
+            await sendGroupMessage(guildId, `⚠️ 紧急提醒：3分钟后将开始禁言 (${scheduleName})`);
+          });
+          registeredJobs.set(remind3Key, remind3Dispose);
+        }
+        
+        if (remind1Minute > currentTotalMinutes) {
+          const remind1Hour = Math.floor(remind1Minute / 60);
+          const remind1Min = remind1Minute % 60;
+          const remind1Cron = `0 ${remind1Min} ${remind1Hour} * * *`;
+          const remind1Key = `remind1-${guildId}-${scheduleName}`;
+          const remind1Dispose = ctx.cron(remind1Cron, async () => {
+            await sendGroupMessage(guildId, `⚠️ 紧急提醒：1分钟后将开始禁言 (${scheduleName})`);
+          });
+          registeredJobs.set(remind1Key, remind1Dispose);
+        }
+        
+        // 设置禁言任务
+        const muteJobKey = `mute-${guildId}-${scheduleName}`;
+        const muteDispose = ctx.cron(muteTime, async () => {
+          try {
+            logger.info(`执行紧急定时禁言: 群组 ${guildId} (${scheduleName})`);
+            
+            const onebotBot = ctx.bots.find(bot => bot.platform === 'onebot');
+            if (!onebotBot) {
+              logger.error(`群组 ${guildId} 紧急定时禁言失败: 未找到 OneBot 协议机器人`);
+              return;
+            }
+            
+            const session = {
+              guildId: guildId,
+              bot: onebotBot,
+              platform: 'onebot'
+            };
+            
+            await SetGroupMute(ctx, session as any, guildId, true);
+            await sendGroupMessage(guildId, `🔇 紧急定时禁言已生效 (${scheduleName})`);
+            logger.info(`群组 ${guildId} 紧急定时禁言成功 (${scheduleName})`);
+          } catch (error) {
+            logger.error(`群组 ${guildId} 紧急定时禁言失败 (${scheduleName}):`, error);
+          }
+        });
+        registeredJobs.set(muteJobKey, muteDispose);
+        
+        logger.info(`已设置紧急禁言任务: 群组 ${guildId} (${scheduleName}) 在 ${muteTimeInfo.hours}:${muteTimeInfo.minutes.toString().padStart(2, '0')}`);
+      }
+      
+      // 如果解禁时间还没到，设置解禁任务
+      if (unmuteTotalMinutes > currentTotalMinutes) {
+        const unmuteJobKey = `unmute-${guildId}-${scheduleName}`;
+        const unmuteDispose = ctx.cron(unmuteTime, async () => {
+          try {
+            logger.info(`执行紧急定时解禁: 群组 ${guildId} (${scheduleName})`);
+            
+            const onebotBot = ctx.bots.find(bot => bot.platform === 'onebot');
+            if (!onebotBot) {
+              logger.error(`群组 ${guildId} 紧急定时解禁失败: 未找到 OneBot 协议机器人`);
+              return;
+            }
+            
+            const session = {
+              guildId: guildId,
+              bot: onebotBot,
+              platform: 'onebot'
+            };
+            
+            await SetGroupMute(ctx, session as any, guildId, false);
+            await sendGroupMessage(guildId, `🔊 紧急定时解禁已生效 (${scheduleName})`);
+            logger.info(`群组 ${guildId} 紧急定时解禁成功 (${scheduleName})`);
+          } catch (error) {
+            logger.error(`群组 ${guildId} 紧急定时解禁失败 (${scheduleName}):`, error);
+          }
+        });
+        registeredJobs.set(unmuteJobKey, unmuteDispose);
+        
+        logger.info(`已设置紧急解禁任务: 群组 ${guildId} (${scheduleName}) 在 ${unmuteTimeInfo.hours}:${unmuteTimeInfo.minutes.toString().padStart(2, '0')}`);
+      }
+      
+    } catch (error) {
+      logger.error(`设置群组 ${guildId} 紧急定时任务失败 (${scheduleName}):`, error);
+    }
+  }
+
   // 设置带提醒的定时任务
   async function setupScheduleWithNotifications(guildId: string, muteTime: string, unmuteTime: string, scheduleName: string) {
     try {
@@ -484,6 +668,55 @@ export function TimedMute(ctx: Context, config: Config) {
       } catch (error) {
         logger.error('重载定时禁言任务失败:', error);
         return '重载定时禁言任务失败，请查看日志';
+      }
+    });
+
+  // 紧急调整今天的定时禁言配置
+  ctx.command('紧急调整今日禁言 <configType:string>', { authority: 4 })
+    .usage('紧急调整今天的定时禁言配置\n参数: workday(工作日) 或 holiday(节假日)')
+    .example('紧急调整今日禁言 holiday  # 将今天改为使用节假日配置')
+    .example('紧急调整今日禁言 workday  # 将今天改为使用工作日配置')
+    .action(async ({ session }, configType) => {
+      if (!session) {
+        return '无效的会话';
+      }
+
+      const guildId = session.guildId;
+      if (!guildId) {
+        return '无效的频道';
+      }
+
+      // 验证参数
+      if (!configType || (configType !== 'workday' && configType !== 'holiday')) {
+        return '❌ 参数错误！请使用 "workday" 或 "holiday"';
+      }
+
+      const groupConfig = config.timedMuteGroups.find(g => g.guildId === guildId);
+      if (!groupConfig) {
+        return `❌ 群组 ${guildId} 未配置智能定时禁言`;
+      }
+
+      try {
+        // 获取今天的日期
+        const today = new Date();
+        const todayStr = today.toISOString().split('T')[0];
+        
+        // 设置手动覆盖
+        const useHolidayConfig = configType === 'holiday';
+        const setBy = session.username || session.userId || '未知用户';
+        setManualOverride(guildId, todayStr, useHolidayConfig, setBy);
+        
+        // 立即重新设置今天剩余时间的定时任务
+        await setupTodayEmergencySchedules(groupConfig, configType);
+        
+        const configTypeName = configType === 'holiday' ? '节假日' : '工作日';
+        return `✅ 紧急调整成功！\n` +
+               `📅 今天 (${todayStr}) 已调整为使用 ${configTypeName} 配置\n` +
+               `⚡ 已重新设置今天剩余时间的定时任务\n` +
+               `👤 操作者: ${setBy}`;
+      } catch (error) {
+        logger.error('紧急调整今日禁言配置失败:', error);
+        return '❌ 紧急调整失败，请查看日志';
       }
     });
 
