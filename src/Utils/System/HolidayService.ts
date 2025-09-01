@@ -1,5 +1,5 @@
 import { Context } from 'koishi';
-import { Config } from '../config';
+import { Config } from '../../config';
 
 export interface HolidayInfo {
   year: number;

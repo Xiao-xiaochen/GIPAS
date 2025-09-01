@@ -8,14 +8,24 @@ import { ReelectionPollSystem } from './index';
 export class ReelectionSystemTest {
   private ctx: Context;
   private config: Config;
-  private system: ReelectionPollSystem;
+  private system: ReelectionPollSystem | null = null;
   private logger: any;
 
   constructor(ctx: Context, config: Config) {
     this.ctx = ctx;
     this.config = config;
-    this.system = new ReelectionPollSystem(ctx, config);
+    // 不在构造函数中创建系统实例，避免循环依赖
     this.logger = ctx.logger('gipas:reelection-test');
+  }
+
+  /**
+   * 获取或创建系统实例
+   */
+  private getSystem(): ReelectionPollSystem {
+    if (!this.system) {
+      this.system = new ReelectionPollSystem(this.ctx, this.config);
+    }
+    return this.system;
   }
 
   /**
@@ -88,7 +98,7 @@ export class ReelectionSystemTest {
     const details = [];
     
     try {
-      const sessionManager = this.system.getSessionManager();
+      const sessionManager = this.getSystem().getSessionManager();
       const testAdminId = 'test_admin_' + Date.now();
 
       // 测试创建会话
@@ -185,7 +195,7 @@ export class ReelectionSystemTest {
     const details = [];
     
     try {
-      const voteHandler = this.system.getVoteHandler();
+      const voteHandler = this.getSystem().getVoteHandler();
       
       // 测试投票统计功能
       const statsResult = await voteHandler.getVoteStatistics(guildId);
@@ -223,7 +233,7 @@ export class ReelectionSystemTest {
     const details = [];
     
     try {
-      const resultProcessor = this.system.getResultProcessor();
+      const resultProcessor = this.getSystem().getResultProcessor();
       
       // 测试结果处理功能
       const processResult = await resultProcessor.processResults(guildId);
@@ -262,7 +272,7 @@ export class ReelectionSystemTest {
     
     try {
       // 测试系统统计
-      const stats = await this.system.getSystemStats();
+      const stats = await this.getSystem().getSystemStats();
       if (typeof stats.totalActiveAdmins === 'number') {
         details.push('✅ 系统统计功能正常');
       } else {
@@ -271,7 +281,7 @@ export class ReelectionSystemTest {
       }
 
       // 测试手动连任检查
-      const checkResult = await this.system.manualReelectionCheck(guildId);
+      const checkResult = await this.getSystem().manualReelectionCheck(guildId);
       if (checkResult.includes('检查完成')) {
         details.push('✅ 手动连任检查功能正常');
       } else {

@@ -1,6 +1,6 @@
 import { Context } from 'koishi';
 import { GoogleGenAI, Content } from "@google/genai";
-import { Config } from '../config';
+import { Config } from '../../config';
 
 export interface AIResponse {
   text: string;

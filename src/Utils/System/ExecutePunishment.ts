@@ -1,6 +1,6 @@
 import { Context , Session } from 'koishi'
 import { OneBotBot } from 'koishi-plugin-adapter-onebot'
-import { ViolationAnalysisResult } from '../type'
+import { ViolationAnalysisResult } from '../../type'
 
 
 

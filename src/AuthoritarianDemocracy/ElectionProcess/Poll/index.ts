@@ -33,8 +33,8 @@ export class ReelectionPollSystem {
     // 添加迁移命令
     addMigrationCommands(ctx, config);
     
-    // 添加测试命令
-    addTestCommands(ctx, config);
+    // 注意：测试命令需要手动启用，避免循环依赖
+    // addTestCommands(ctx, config);
     
     this.logger.info('连任投票系统已启动');
   }
