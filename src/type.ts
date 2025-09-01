@@ -85,11 +85,27 @@ export interface ElectionVote {
 // 连任投票记录
 export interface ReelectionVote {
   id: number;
+  sessionId: string; // 关联到投票会话
   adminUserId: string;
   guildId: string;
   voterId: string;
   isSupport: boolean;
   voteTime: Date;
+}
+
+// 连任投票会话
+export interface ReelectionSession {
+  id: number;
+  sessionId: string;
+  adminUserId: string;
+  guildId: string;
+  initiatorId?: string;
+  startTime: Date;
+  endTime?: Date;
+  status: 'ongoing' | 'completed' | 'cancelled';
+  requiredVotes: number;
+  autoTriggered: boolean; // 是否自动触发（如任期到期）
+  reason?: string; // 触发原因
 }
 
 export interface Election {

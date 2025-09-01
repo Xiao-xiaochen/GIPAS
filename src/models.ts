@@ -1,5 +1,5 @@
 import { Context } from 'koishi';
-import { UserRecord, ViolationRecord, FileSystem, ElectionCandidate, ElectionVote, Election, Administrator, ReelectionVote, ImpeachmentRecord } from './type';
+import { UserRecord, ViolationRecord, FileSystem, ElectionCandidate, ElectionVote, Election, Administrator, ReelectionVote, ReelectionSession, ImpeachmentRecord } from './type';
 
 
 
@@ -13,6 +13,7 @@ declare module 'koishi' {
     Election: Election;
     Administrator: Administrator;
     ReelectionVote: ReelectionVote;
+    ReelectionSession: ReelectionSession;
     ImpeachmentRecord: ImpeachmentRecord;
   }
 }
@@ -92,6 +93,7 @@ export function Database(ctx: Context) {
   // 连任投票表
   ctx.model.extend('ReelectionVote', {
     id: { type: 'unsigned' },
+    sessionId: { type: 'string', length: 255 },
     adminUserId: { type: 'string', length: 255 },
     guildId: { type: 'string', length: 255 },
     voterId: { type: 'string', length: 255 },
@@ -100,6 +102,24 @@ export function Database(ctx: Context) {
   }, {
     primary: 'id',
     autoInc: true
+  });
+
+  // 连任投票会话表
+  ctx.model.extend('ReelectionSession', {
+    id: { type: 'unsigned' },
+    sessionId: { type: 'string', length: 255 },
+    adminUserId: { type: 'string', length: 255 },
+    guildId: { type: 'string', length: 255 },
+    initiatorId: { type: 'string', length: 255 },
+    startTime: { type: 'timestamp' },
+    endTime: { type: 'timestamp' },
+    status: { type: 'string', length: 50 }, // 'ongoing', 'completed', 'cancelled'
+    requiredVotes: { type: 'unsigned', initial: 3 },
+    autoTriggered: { type: 'boolean', initial: false },
+    reason: { type: 'text' }
+  }, {
+    autoInc: true,
+    primary: 'id'
   });
 
   // 选举表

@@ -1,7 +1,8 @@
 import { Context } from 'koishi';
 import { Config } from '../config';
 import { ElectionManagement } from './ElectionManagement';
-import { RegularPowerTransfer } from './RegularPowerTransfer';
+import { PowerTransfer } from './PowerTransfer';
+import { ImpeachmentProcess } from './ImpeachmentProcess';
 import { CandidateManagement } from './ElectionProcess/Candidate';
 import { VotingSystem } from './ElectionProcess/Vote';
 import { ReelectionPoll } from './ElectionProcess/Poll';
@@ -21,7 +22,8 @@ export function AuthoritarianDemocracy(ctx: Context, config: Config) {
 
   // 威权民主选举核心功能
   ElectionManagement(ctx, config);
-  RegularPowerTransfer(ctx, config);
+  PowerTransfer(ctx, config);
+  ImpeachmentProcess(ctx, config);
   CandidateManagement(ctx, config);
   VotingSystem(ctx, config);
   ReelectionPoll(ctx, config);
